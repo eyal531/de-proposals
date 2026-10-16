@@ -1,0 +1,20 @@
+# Notes for working on this repo
+
+Proposal (quote) system for Digital Effective, an Israeli digital agency. UI is Hebrew, RTL. The functional spec (Word, v0.2) defines chapters referenced in code comments (e.g. "spec 9.2").
+
+## Stack
+- Next.js 15 App Router, TypeScript, Tailwind v4 (component classes in `src/app/globals.css` inside `@layer components` so utilities override them).
+- Supabase: Postgres + Auth. Schema and RLS in `supabase/migrations/` (never edit an applied migration; add a new file). Deployed by `.github/workflows/supabase-migrate.yml`.
+- Vercel deploys the app from `main`.
+
+## Key modules
+- `src/lib/pricing/engine.ts` – pure pricing engine shared by server and browser. All models incl. `hybrid_max` (MAX(fixed, percent × media)). Covered by `engine.test.ts`; add tests for any pricing change.
+- `src/lib/pricing/approvals.ts` – approval thresholds (levels none/manager/ceo).
+- `src/lib/greeting.ts` – "לכבוד" block, salutation, gendered wording. `src/lib/email-domain.ts` – business vs free email, website guess.
+- `src/app/(app)/proposals/actions.ts` – server actions (create, save, approval, send). Status transitions live here.
+- Client page `src/app/p/[token]` + `src/app/api/p/[token]/*` use the service-role client. Only `toPublic()` output may reach the browser (no internal notes).
+
+## Conventions
+- Employees act through RLS (`createClient()`); service role only for the public client page.
+- Keep user-facing text in Hebrew; code and comments in English.
+- Before pushing: `npm test && npx tsc --noEmit && npx eslint src && npm run build`.

@@ -1,36 +1,44 @@
-This is a [Next.js](https://nextjs.org) project bootstrapped with [`create-next-app`](https://nextjs.org/docs/app/api-reference/cli/create-next-app).
+# מערכת הצעות מחיר – דיגיטל אפקטיב
 
-## Getting Started
+מערכת פנימית להפקת הצעות מחיר ללקוחות, לפי האפיון הפונקציונלי (גרסה 0.2).
 
-First, run the development server:
+**טכנולוגיה:** Next.js (React) · Supabase (Postgres, התחברות) · Vercel (אחסון) · GitHub (קוד ופריסה אוטומטית).
+
+## מה קיים בגרסה הזו
+
+- **כניסת עובדים** עם Google או קישור במייל. המשתמש הראשון שנכנס הופך למנהל מערכת; עובדים מהדומיין שהוגדר בהגדרות מקבלים גישה כאנשי מכירות.
+- **קטלוג שירותים** עם כל מודלי התמחור: ריטיינר, חד-פעמי, שעתי, בנק שעות, אחוז ממדיה, **"קבוע או אחוז מהמדיה – הגבוה מביניהם"**, בסיס + אחוז, מדרגות, מחיר ליחידה. היסטוריית שינויי מחיר נשמרת אוטומטית.
+- **הצעה חדשה:** בלוק "לכבוד" אוטומטי (שם, תפקיד, חברה), זיהוי אתר הלקוח מכתובת האימייל, לשון פנייה, הערות מהשיחה.
+- **בונה הצעה:** שורות חובה / אופציונליות / חלופות, הנחות לשורה וכלליות, תקציב מדיה עם נקודת שוויון, סיכום חודשי וחד-פעמי, מע"מ, ערך התקשרות.
+- **בדיקת ספים ואישורים:** הנחות, מחיר רצפה, פריט חופשי, ערך עסקה, התחייבות קצרה – עם בקשת אישור והחלטה של מאשר.
+- **דף ללקוח** בקישור אישי: בחירת אופציות וחלופות עם מחיר מתעדכן, שאלה לאיש המכירות, חתימה בציור, הדפסה ל-PDF, מעקב צפיות.
+- **הגדרות:** מע"מ, עיגול, תוקף, ספי אישור, דומיינים, תנאים, ניהול משתמשים ותפקידים.
+
+## בהמשך (לפי האפיון)
+
+ניתוח AI של אתר הלקוח והמתחרים, ניתוח ביטויי SEO, הערכת תקציב PPC, חלופות ותבניות לבניית אתר, סנכרון Airtable, שליחת מייל מהמערכת והתראות, PDF מעוצב, דוחות.
+
+## הקמה (פעם אחת)
+
+1. **Supabase** – פותחים פרויקט חדש ב-supabase.com (אזור Frankfurt / eu-central-1 מומלץ).
+2. **סודות ב-GitHub** (Settings → Secrets and variables → Actions):
+   - `SUPABASE_PROJECT_REF` – המזהה מכתובת הפרויקט
+   - `SUPABASE_DB_PASSWORD` – סיסמת מסד הנתונים שנבחרה בהקמה
+   - `SUPABASE_ACCESS_TOKEN` – מ-supabase.com/dashboard/account/tokens
+
+   אחרי ההגדרה מריצים את "Database migrations" בלשונית Actions (או שהיא רצה לבד בכל שינוי במסד הנתונים).
+3. **Vercel** – מייבאים את המאגר ומגדירים את משתני הסביבה מ-`.env.example`.
+4. **התחברות עם Google** – ב-Supabase: Authentication → Providers → Google; וב-Authentication → URL Configuration מוסיפים את כתובת האתר ואת `https://<כתובת>/auth/callback`.
+5. **דומיין** – רשומת CNAME, למשל `proposals.digitaleffective.co.il` → Vercel.
+6. נכנסים ראשונים למערכת (הופכים למנהל), ובהגדרות מוסיפים את דומיין החברה ומעדכנים את המחירון.
+
+## פיתוח
 
 ```bash
+npm install
+cp .env.example .env.local   # למלא ערכים
 npm run dev
-# or
-yarn dev
-# or
-pnpm dev
-# or
-bun dev
+npm test                      # בדיקות מנוע התמחור, הפנייה וזיהוי האימייל
 ```
 
-Open [http://localhost:3000](http://localhost:3000) with your browser to see the result.
-
-You can start editing the page by modifying `app/page.tsx`. The page auto-updates as you edit the file.
-
-This project uses [`next/font`](https://nextjs.org/docs/app/building-your-application/optimizing/fonts) to automatically optimize and load [Geist](https://vercel.com/font), a new font family for Vercel.
-
-## Learn More
-
-To learn more about Next.js, take a look at the following resources:
-
-- [Next.js Documentation](https://nextjs.org/docs) - learn about Next.js features and API.
-- [Learn Next.js](https://nextjs.org/learn) - an interactive Next.js tutorial.
-
-You can check out [the Next.js GitHub repository](https://github.com/vercel/next.js) - your feedback and contributions are welcome!
-
-## Deploy on Vercel
-
-The easiest way to deploy your Next.js app is to use the [Vercel Platform](https://vercel.com/new?utm_medium=default-template&filter=next.js&utm_source=create-next-app&utm_campaign=create-next-app-readme) from the creators of Next.js.
-
-Check out our [Next.js deployment documentation](https://nextjs.org/docs/app/building-your-application/deploying) for more details.
+שינויים במסד הנתונים נכתבים כקובץ חדש ב-`supabase/migrations/` ונפרסים אוטומטית בדחיפה ל-main.
