@@ -32,23 +32,26 @@ jobs:
       - name: Verify project and token
         if: steps.secrets.outputs.ready == 'true'
         run: |
-          REF="$(echo -n "$SUPABASE_PROJECT_REF" | tr -d '[:space:]')"
-          if ! [[ "$REF" =~ ^[a-z0-9]{15,30}$ ]]; then
-            echo "::error::SUPABASE_PROJECT_REF does not look like a project ID (length ${#REF}). It should be only the ~20 lowercase letters, not the full URL."
-            exit 1
-          fi
           TOKEN="$(echo -n "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
           if [[ "$TOKEN" != sbp_* ]]; then
             echo "::error::SUPABASE_ACCESS_TOKEN should start with sbp_ (create it under Account → Access Tokens)."
             exit 1
           fi
-          CODE=$(curl -s -o /tmp/project.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "https://api.supabase.com/v1/projects/$REF")
-          case "$CODE" in
-            200) echo "Project found: $(jq -r '.name + " / " + .region + " / " + .status' /tmp/project.json)";;
-            401) echo "::error::SUPABASE_ACCESS_TOKEN was rejected (401). Create a new access token and update the secret."; exit 1;;
-            403|404) echo "::error::Project $REF was not found for this token ($CODE). Check SUPABASE_PROJECT_REF."; exit 1;;
-            *) echo "::error::Supabase API returned $CODE"; exit 1;;
-          esac
+          CODE=$(curl -s -o /tmp/projects.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "https://api.supabase.com/v1/projects")
+          if [ "$CODE" = "401" ]; then echo "::error::SUPABASE_ACCESS_TOKEN was rejected (401). Create a new access token and update the secret."; exit 1; fi
+          if [ "$CODE" != "200" ]; then echo "::error::Supabase API returned $CODE"; exit 1; fi
+          # Use the ref from the secret if it matches a project; otherwise find the project by name, or the only project.
+          REF="$(echo -n "$SUPABASE_PROJECT_REF" | tr -d '[:space:]')"
+          if ! jq -e --arg r "$REF" 'any(.[]; .id == $r)' /tmp/projects.json >/dev/null; then
+            REF=$(jq -r '[.[] | select(.name == "de-proposals")][0].id // empty' /tmp/projects.json)
+            [ -z "$REF" ] && [ "$(jq length /tmp/projects.json)" = "1" ] && REF=$(jq -r '.[0].id' /tmp/projects.json)
+            if [ -z "$REF" ]; then
+              echo "::error::Could not find the Supabase project. Projects visible to this token: $(jq -r '[.[] | .name + " (" + .id + ")"] | join(", ")' /tmp/projects.json)"
+              exit 1
+            fi
+            echo "::notice::SUPABASE_PROJECT_REF secret did not match a project; using project 'de-proposals' (id $REF) found by name."
+          fi
+          echo "::notice::Project URL: https://$REF.supabase.co"
           echo "REF=$REF" >> "$GITHUB_ENV"
           echo "SUPABASE_ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
 
