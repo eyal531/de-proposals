@@ -1,0 +1,32 @@
+name: Configure Supabase auth
+
+# Sets the Site URL and allowed redirect URLs in Supabase Auth (Management API, token only).
+
+on:
+  workflow_dispatch:
+    inputs:
+      site_url:
+        description: "Public site URL"
+        required: true
+        default: "https://de-proposals.vercel.app"
+
+jobs:
+  configure:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+      SITE_URL: ${{ inputs.site_url }}
+    steps:
+      - name: Update auth URLs
+        run: |
+          set -euo pipefail
+          TOKEN="$(echo -n "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          echo "::add-mask::$TOKEN"
+          REF=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.supabase.com/v1/projects | jq -r '[.[] | select(.name == "de-proposals")][0].id')
+          SITE="${SITE_URL%/}"
+          ALLOW="$SITE/auth/callback,$SITE/**,http://localhost:3000/auth/callback"
+          BODY=$(jq -n --arg s "$SITE" --arg a "$ALLOW" '{site_url: $s, uri_allow_list: $a}')
+          CODE=$(curl -s -o /tmp/res.json -w "%{http_code}" -X PATCH -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            --data "$BODY" "https://api.supabase.com/v1/projects/$REF/config/auth")
+          if [ "$CODE" != "200" ]; then echo "::error::Update failed ($CODE): $(head -c 600 /tmp/res.json)"; exit 1; fi
+          echo "::notice::Auth site_url=$(jq -r .site_url /tmp/res.json) redirect_urls=$(jq -r .uri_allow_list /tmp/res.json) email_enabled=$(jq -r .external_email_enabled /tmp/res.json)"
