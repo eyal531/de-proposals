@@ -32,7 +32,7 @@ export default function LoginPage() {
     <main className="flex min-h-screen items-center justify-center p-4">
       <div className="card w-full max-w-sm space-y-5">
         <div>
-          <h1 className="text-xl font-bold text-brand">הצעות מחיר</h1>
+          <h1 className="text-xl font-bold text-brand">ניהול פנימי</h1>
           <p className="text-sm text-muted">דיגיטל אפקטיב – כניסה לצוות</p>
         </div>
         <button className="btn btn-primary w-full" onClick={google} disabled={busy}>
