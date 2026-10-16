@@ -71,7 +71,7 @@ jobs:
             echo "::error::Could not read the connection pooler settings from Supabase: $(head -c 300 /tmp/pooler.json)"
             exit 1
           fi
-          [ -z "$USER" ] && USER="postgres.$REF"
+          case "$USER" in *.*) ;; *) USER="postgres.$REF";; esac
           PASS=$(jq -rn --arg p "$SUPABASE_DB_PASSWORD" '$p|@uri')
           echo "::add-mask::$PASS"
           echo "DB_URL=postgresql://$USER:$PASS@$HOST:5432/postgres" >> "$GITHUB_ENV"
