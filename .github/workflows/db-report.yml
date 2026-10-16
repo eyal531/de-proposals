@@ -1,0 +1,29 @@
+name: DB status report
+
+# Read-only health report of the production database (counts only, no personal data).
+
+on:
+  workflow_dispatch:
+
+jobs:
+  report:
+    runs-on: ubuntu-latest
+    env:
+      SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
+    steps:
+      - name: Report
+        run: |
+          set -euo pipefail
+          TOKEN="$(echo -n "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
+          echo "::add-mask::$TOKEN"
+          REF=$(curl -s -H "Authorization: Bearer $TOKEN" https://api.supabase.com/v1/projects | jq -r '[.[] | select(.name == "de-proposals")][0].id')
+          Q="select json_build_object(
+            'users', (select json_agg(json_build_object('role', role, 'active', active)) from public.profiles),
+            'proposals_by_status', (select json_object_agg(status, n) from (select status, count(*) n from public.proposals group by status) s),
+            'approvals', (select json_agg(json_build_object('level', level, 'decision', decision, 'at', created_at)) from public.approvals),
+            'last_events', (select json_agg(json_build_object('type', type, 'at', created_at)) from (select type, created_at from public.proposal_events order by created_at desc limit 15) e),
+            'allowed_domains', (select allowed_email_domains from public.app_settings where id = 1)
+          ) as report;"
+          curl -s -X POST -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+            --data "$(jq -n --arg q "$Q" '{query: $q}')" "https://api.supabase.com/v1/projects/$REF/database/query" > /tmp/r.json
+          echo "::notice::$(jq -c '.[0].report // .' /tmp/r.json | head -c 3500)"
