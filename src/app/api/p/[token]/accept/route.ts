@@ -4,6 +4,7 @@ import { clientIp, loadByToken } from "@/lib/public-data";
 import { OPEN_STATUSES } from "@/lib/types";
 import { calcProposal } from "@/lib/proposal-calc";
 import { isExpired } from "@/lib/format";
+import { notifyClientEvent } from "@/lib/notify";
 
 const body = z.object({
   name: z.string().trim().min(2).max(120),
@@ -43,5 +44,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
   });
   await db.from("proposals").update({ current_version: proposal.current_version + 1 }).eq("id", proposal.id);
   await db.from("proposal_events").insert({ proposal_id: proposal.id, type: "accepted", meta: { name: signer.name, role: signer.role, ip: signer.ip } });
+  await notifyClientEvent(db, new URL(req.url).origin, { ...proposal, totals: pricing.totals }, "accepted", { signer: signer.name });
   return NextResponse.json({ ok: true });
 }

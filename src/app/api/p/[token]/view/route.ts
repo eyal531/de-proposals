@@ -1,6 +1,7 @@
 import { NextResponse } from "next/server";
 import { loadByToken } from "@/lib/public-data";
 import { LIVE_STATUSES } from "@/lib/types";
+import { notifyClientEvent } from "@/lib/notify";
 
 export async function POST(req: Request, { params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -19,5 +20,6 @@ export async function POST(req: Request, { params }: { params: Promise<{ token: 
     .eq("id", proposal.id);
   const ua = req.headers.get("user-agent") ?? "";
   await db.from("proposal_events").insert({ proposal_id: proposal.id, type: "viewed", meta: { mobile: /Mobi|Android|iPhone/i.test(ua), ua: ua.slice(0, 300) } });
+  if (!proposal.first_viewed_at) await notifyClientEvent(db, new URL(req.url).origin, proposal, "first_view");
   return NextResponse.json({ ok: true });
 }

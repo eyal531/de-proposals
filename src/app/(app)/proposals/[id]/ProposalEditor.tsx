@@ -179,7 +179,7 @@ export function ProposalEditor(props: {
       const r2 = await then();
       if (!r2.ok) setMsg({ kind: "err", text: r2.error ?? "שגיאה" });
       else {
-        setMsg({ kind: "ok", text: thenText ?? "בוצע" });
+        setMsg(r2.warning ? { kind: "warn", text: r2.warning as string } : { kind: "ok", text: (r2.message as string) ?? thenText ?? "בוצע" });
         after?.(r2);
       }
       router.refresh();

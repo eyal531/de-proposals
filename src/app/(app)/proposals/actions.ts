@@ -8,6 +8,8 @@ import { proposalTitle, salutation } from "@/lib/greeting";
 import { normalizeWebsite } from "@/lib/email-domain";
 import { calcProposal, LEVEL_RANK } from "@/lib/proposal-calc";
 import type { ApprovalLevel } from "@/lib/pricing/approvals";
+import { notifyApprovalDecided, notifyApprovalRequested } from "@/lib/notify";
+import { emailConfigured } from "@/lib/email";
 import type { ContentBlock, Proposal, ProposalItem, Section, Service } from "@/lib/types";
 
 type Supa = Awaited<ReturnType<typeof requireMember>>["supabase"];
@@ -272,17 +274,22 @@ export async function saveProposal(payload: SavePayload): Promise<ActionResult<{
 
 // ---------- approvals ----------
 
-export async function requestApproval(id: string, note: string): Promise<ActionResult> {
+export async function requestApproval(id: string, note: string): Promise<ActionResult<{ message: string; warning?: string }>> {
   const { supabase, user } = await requireMember();
-  const { proposal, approval } = await recalcAndStore(supabase, id);
+  const { proposal, approval, pricing } = await recalcAndStore(supabase, id);
   if (approval.level === "none") return fail("ההצעה בתוך הספים ואינה דורשת אישור.");
   if (!["draft", "changes_requested", "approved", "sent", "viewed", "negotiation"].includes(proposal.status)) return fail("לא ניתן לבקש אישור בסטטוס הנוכחי.");
   const { error } = await supabase.from("approvals").insert({ proposal_id: id, level: approval.level, reasons: approval.reasons, request_note: note.slice(0, 2000), requested_by: user.id });
   if (error) return fail(error.message);
   await supabase.from("proposals").update({ status: "pending_approval" }).eq("id", id);
   await logEvent(supabase, id, "approval_requested", user.id, { level: approval.level });
+
+  const { to, result } = await notifyApprovalRequested(supabase, await siteUrl(), { ...proposal, totals: pricing.totals }, approval.level, approval.reasons, note, user.id);
   revalidatePath(`/proposals/${id}`);
-  return { ok: true };
+  if (result.ok) return { ok: true, message: `נשלח לאישור. הודעה נשלחה במייל אל ${to.join(", ")}.` };
+  if (result.skipped && !emailConfigured())
+    return { ok: true, message: "נשלח לאישור.", warning: "נשלח לאישור. שליחת מיילים עדיין לא הוגדרה, ולכן המאשר יראה את הבקשה רק בתוך המערכת." };
+  return { ok: true, message: "נשלח לאישור.", warning: `נשלח לאישור, אבל שליחת המייל נכשלה (${result.error ?? "שגיאה"}). המאשר יראה את הבקשה בתוך המערכת.` };
 }
 
 export async function decideApproval(approvalId: string, decision: "approved" | "changes_requested", note: string): Promise<ActionResult> {
@@ -300,6 +307,9 @@ export async function decideApproval(approvalId: string, decision: "approved" | 
     .update(decision === "approved" ? { status: "approved", approved_at: now, approved_by: user.id } : { status: "changes_requested" })
     .eq("id", a.proposal_id);
   await logEvent(supabase, a.proposal_id as string, decision === "approved" ? "approved" : "changes_requested", user.id, { note });
+  // tell the requester (skip when approving your own request)
+  const { data: p } = await supabase.from("proposals").select("id, title, number, company_name, created_by, totals").eq("id", a.proposal_id).single();
+  if (p && p.created_by !== user.id) await notifyApprovalDecided(supabase, await siteUrl(), p as Proposal, decision, note, user.id);
   revalidatePath(`/proposals/${a.proposal_id}`);
   return { ok: true };
 }
