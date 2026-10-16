@@ -1,7 +1,8 @@
 name: Database migrations
 
 # Applies new files in supabase/migrations to the production Supabase project on every push to main.
-# Required repository secrets: SUPABASE_ACCESS_TOKEN, SUPABASE_DB_PASSWORD, SUPABASE_PROJECT_REF
+# Uses the Supabase Management API (SQL endpoint), so only an access token is needed – no database password.
+# Required repository secret: SUPABASE_ACCESS_TOKEN. Optional: SUPABASE_PROJECT_REF (otherwise the project named "de-proposals" is used).
 
 on:
   push:
@@ -14,33 +15,18 @@ jobs:
     runs-on: ubuntu-latest
     env:
       SUPABASE_ACCESS_TOKEN: ${{ secrets.SUPABASE_ACCESS_TOKEN }}
-      SUPABASE_DB_PASSWORD: ${{ secrets.SUPABASE_DB_PASSWORD }}
       SUPABASE_PROJECT_REF: ${{ secrets.SUPABASE_PROJECT_REF }}
     steps:
       - uses: actions/checkout@v4
 
-      - name: Check secrets
-        id: secrets
-        run: |
-          if [ -z "$SUPABASE_ACCESS_TOKEN" ] || [ -z "$SUPABASE_DB_PASSWORD" ] || [ -z "$SUPABASE_PROJECT_REF" ]; then
-            echo "::warning::Supabase secrets are not set yet – skipping migrations."
-            echo "ready=false" >> "$GITHUB_OUTPUT"
-          else
-            echo "ready=true" >> "$GITHUB_OUTPUT"
-          fi
-
-      - name: Verify project and token
-        if: steps.secrets.outputs.ready == 'true'
+      - name: Find project
         run: |
           TOKEN="$(echo -n "$SUPABASE_ACCESS_TOKEN" | tr -d '[:space:]')"
-          if [[ "$TOKEN" != sbp_* ]]; then
-            echo "::error::SUPABASE_ACCESS_TOKEN should start with sbp_ (create it under Account → Access Tokens)."
-            exit 1
-          fi
+          if [ -z "$TOKEN" ]; then echo "::warning::SUPABASE_ACCESS_TOKEN is not set – skipping."; echo "SKIP=1" >> "$GITHUB_ENV"; exit 0; fi
+          if [[ "$TOKEN" != sbp_* ]]; then echo "::error::SUPABASE_ACCESS_TOKEN should start with sbp_."; exit 1; fi
           CODE=$(curl -s -o /tmp/projects.json -w "%{http_code}" -H "Authorization: Bearer $TOKEN" "https://api.supabase.com/v1/projects")
           if [ "$CODE" = "401" ]; then echo "::error::SUPABASE_ACCESS_TOKEN was rejected (401). Create a new access token and update the secret."; exit 1; fi
           if [ "$CODE" != "200" ]; then echo "::error::Supabase API returned $CODE"; exit 1; fi
-          # Use the ref from the secret if it matches a project; otherwise find the project by name, or the only project.
           REF="$(echo -n "$SUPABASE_PROJECT_REF" | tr -d '[:space:]')"
           if ! jq -e --arg r "$REF" 'any(.[]; .id == $r)' /tmp/projects.json >/dev/null; then
             REF=$(jq -r '[.[] | select(.name == "de-proposals")][0].id // empty' /tmp/projects.json)
@@ -49,43 +35,45 @@ jobs:
               echo "::error::Could not find the Supabase project. Projects visible to this token: $(jq -r '[.[] | .name + " (" + .id + ")"] | join(", ")' /tmp/projects.json)"
               exit 1
             fi
-            echo "::notice::SUPABASE_PROJECT_REF secret did not match a project; using project 'de-proposals' (id $REF) found by name."
           fi
           echo "::notice::Project URL: https://$REF.supabase.co"
           echo "REF=$REF" >> "$GITHUB_ENV"
-          echo "SUPABASE_ACCESS_TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "TOKEN=$TOKEN" >> "$GITHUB_ENV"
+          echo "::add-mask::$TOKEN"
 
-      - uses: supabase/setup-cli@v1
-        if: steps.secrets.outputs.ready == 'true'
-        with:
-          version: latest
-
-      # Connect through the IPv4 session pooler (GitHub runners have no IPv6, the direct DB host is IPv6-only).
-      - name: Build database URL
-        if: steps.secrets.outputs.ready == 'true'
+      - name: Apply migrations
+        if: env.SKIP != '1'
         run: |
-          curl -s -H "Authorization: Bearer $SUPABASE_ACCESS_TOKEN" "https://api.supabase.com/v1/projects/$REF/config/database/pooler" > /tmp/pooler.json
-          HOST=$(jq -r '[.[] | select(.database_type == "PRIMARY")][0].db_host // .[0].db_host // empty' /tmp/pooler.json)
-          USER=$(jq -r '[.[] | select(.database_type == "PRIMARY")][0].db_user // .[0].db_user // empty' /tmp/pooler.json)
-          if [ -z "$HOST" ]; then
-            echo "::error::Could not read the connection pooler settings from Supabase: $(head -c 300 /tmp/pooler.json)"
-            exit 1
-          fi
-          case "$USER" in *.*) ;; *) USER="postgres.$REF";; esac
-          PASS=$(jq -rn --arg p "$SUPABASE_DB_PASSWORD" '$p|@uri')
-          echo "::add-mask::$PASS"
-          echo "DB_URL=postgresql://$USER:$PASS@$HOST:5432/postgres" >> "$GITHUB_ENV"
-          echo "Using pooler host $HOST"
-
-      - name: Push migrations
-        if: steps.secrets.outputs.ready == 'true'
-        run: |
-          set -o pipefail
-          if ! supabase db push --db-url "$DB_URL" --include-all --yes 2>&1 | tee /tmp/push.log; then
-            if grep -qi "password authentication failed" /tmp/push.log; then
-              echo "::error::Database password was rejected. Reset it in Supabase (Project Settings → Database → Reset database password) and update SUPABASE_DB_PASSWORD."
-            else
-              echo "::error::$(tail -n 5 /tmp/push.log | tr '\n' ' ' | head -c 900)"
+          set -euo pipefail
+          sql() {
+            # $1 = SQL text. Prints the JSON result; fails with a readable error.
+            local body code
+            body=$(jq -n --arg q "$1" '{query: $q}')
+            code=$(curl -s -o /tmp/res.json -w "%{http_code}" -X POST \
+              -H "Authorization: Bearer $TOKEN" -H "Content-Type: application/json" \
+              --data "$body" "https://api.supabase.com/v1/projects/$REF/database/query")
+            if [ "$code" != "200" ] && [ "$code" != "201" ]; then
+              echo "::error::SQL failed ($code): $(head -c 900 /tmp/res.json)"
+              return 1
             fi
-            exit 1
-          fi
+            cat /tmp/res.json
+          }
+
+          sql "create schema if not exists app_meta; create table if not exists app_meta.migrations (name text primary key, applied_at timestamptz not null default now());" > /dev/null
+          APPLIED=$(sql "select coalesce(json_agg(name), '[]'::json) as names from app_meta.migrations;" | jq -r '.[0].names[]?' || true)
+
+          COUNT=0
+          for f in $(ls supabase/migrations/*.sql | sort); do
+            NAME=$(basename "$f")
+            if echo "$APPLIED" | grep -qx "$NAME"; then echo "✓ already applied: $NAME"; continue; fi
+            echo "→ applying $NAME"
+            ESCAPED=$(printf "%s" "$NAME" | sed "s/'/''/g")
+            # one request = one transaction: the migration and its bookkeeping row succeed or fail together
+            sql "begin;
+          $(cat "$f")
+          ;
+          insert into app_meta.migrations (name) values ('$ESCAPED');
+          commit;" > /dev/null
+            COUNT=$((COUNT+1))
+          done
+          echo "::notice::Applied $COUNT new migration(s)."
