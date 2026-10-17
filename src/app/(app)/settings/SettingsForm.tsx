@@ -36,6 +36,7 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
         free_email_domains: split(s.free),
         default_terms: s.default_terms,
         default_media_fee_percent: Number(s.default_media_fee_percent),
+        ai_guidelines: s.ai_guidelines,
         brand: s.brand,
         approval_rules: r,
       });
@@ -142,6 +143,17 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
           <label className="label">ספקי דואר פרטיים (לא מזהים מהם אתר לקוח)</label>
           <textarea className="textarea" dir="ltr" value={s.free} onChange={(e) => setS({ ...s, free: e.target.value })} />
         </div>
+      </section>
+
+      <section className="card space-y-2">
+        <h2 className="font-bold">הנחיות כתיבה ל-AI</h2>
+        <p className="text-sm text-muted">איך הסוכנות כותבת: טון, מילים שאוהבים ושלא, מה תמיד להדגיש. ה-AI ישתמש בזה בכל ניתוח ושכתוב.</p>
+        <textarea
+          className="textarea min-h-28"
+          value={s.ai_guidelines}
+          placeholder="לדוגמה: אנחנו כותבים בגובה העיניים, בלי סופרלטיבים. תמיד מדגישים מדידה ושקיפות. לא משתמשים במילה 'מהפכני'."
+          onChange={(e) => setS({ ...s, ai_guidelines: e.target.value })}
+        />
       </section>
 
       <section className="card space-y-2">

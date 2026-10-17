@@ -4,6 +4,8 @@ import { useEffect, useMemo, useState, useTransition } from "react";
 import { useRouter } from "next/navigation";
 import Link from "next/link";
 import { ParamsEditor } from "@/components/ParamsEditor";
+import { AiPanel, RewriteBar } from "./AiTools";
+import { mergeSections } from "@/lib/ai/analyze";
 import { computePricing, usesMediaBudget } from "@/lib/pricing/engine";
 import { checkApprovals, LEVEL_LABEL } from "@/lib/pricing/approvals";
 import { KIND_LABEL, MODEL_LABEL, pricingContext, toPricingInput, usesQuantity } from "@/lib/pricing/meta";
@@ -30,6 +32,7 @@ const EVENT_LABEL: Record<string, string> = {
   rejected: "נדחתה",
   cancelled: "בוטלה",
   validity_extended: "תוקף הוארך",
+  ai_analysis: "נוצר ניתוח AI",
 };
 
 const newId = () => (typeof crypto !== "undefined" && "randomUUID" in crypto ? crypto.randomUUID() : `tmp-${Math.random()}`);
@@ -44,6 +47,7 @@ export function ProposalEditor(props: {
   role: UserRole;
   names: Record<string, string>;
   siteUrl: string;
+  aiEnabled: boolean;
 }) {
   const { services, settings, role } = props;
   const router = useRouter();
@@ -427,6 +431,24 @@ export function ProposalEditor(props: {
         {/* content */}
         <section className="card space-y-3">
           <h2 className="font-bold">תוכן ההצעה</h2>
+          <AiPanel
+            enabled={props.aiEnabled}
+            locked={locked}
+            proposalId={p0.id}
+            hasAi={sections.some((s) => s.source === "ai")}
+            pendingAi={sections.filter((s) => s.source === "ai" && s.visible && s.status !== "approved").length}
+            request={() => ({
+              proposalId: p0.id,
+              companyName: companyName || null,
+              website: website || null,
+              callNotes,
+              addressForm,
+              serviceIds: items.map((i) => i.service_id).filter(Boolean) as string[],
+              serviceNames: items.map((i) => i.name),
+            })}
+            onSections={(fresh) => mark(setSections)(mergeSections(sections, fresh))}
+            onApproveAll={() => mark(setSections)(sections.map((x) => (x.source === "ai" ? { ...x, status: "approved" } : x)))}
+          />
           <div>
             <label className="label">פתיח</label>
             <textarea className="textarea min-h-32" value={intro} disabled={locked} onChange={(e) => mark(setIntro)(e.target.value)} />
@@ -457,6 +479,28 @@ export function ProposalEditor(props: {
                 </button>
               </div>
               <textarea className="textarea min-h-28" value={s.body} disabled={locked || s.locked} onChange={(e) => mark(setSections)(sections.map((x) => (x.id === s.id ? { ...x, body: e.target.value, status: x.source === "ai" ? "edited" : x.status } : x)))} />
+              {props.aiEnabled && !locked && !s.locked && s.body.trim() && (
+                <RewriteBar
+                  title={s.title}
+                  text={s.body}
+                  addressForm={addressForm}
+                  onText={(text) => mark(setSections)(sections.map((x) => (x.id === s.id ? { ...x, body: text, status: x.source === "ai" ? "edited" : x.status } : x)))}
+                />
+              )}
+              {!!s.sources?.length && (
+                <details className="mt-1 text-xs text-muted">
+                  <summary className="cursor-pointer">מקורות ({s.sources.length}) – פנימי, לא מוצג ללקוח</summary>
+                  <ul className="mt-1 space-y-0.5">
+                    {s.sources.map((u) => (
+                      <li key={u} className="num truncate">
+                        <a href={u} target="_blank" rel="noreferrer" className="hover:underline">
+                          {u}
+                        </a>
+                      </li>
+                    ))}
+                  </ul>
+                </details>
+              )}
             </div>
           ))}
           {!locked && (

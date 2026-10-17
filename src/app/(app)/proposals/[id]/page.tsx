@@ -2,6 +2,7 @@ import { notFound } from "next/navigation";
 import { getSettings, requireMember, siteUrl } from "@/lib/data";
 import type { Approval, Proposal, ProposalEvent, ProposalItem, Service } from "@/lib/types";
 import { ProposalEditor } from "./ProposalEditor";
+import { aiConfigured } from "@/lib/ai/claude";
 
 export default async function ProposalPage({ params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
@@ -31,6 +32,7 @@ export default async function ProposalPage({ params }: { params: Promise<{ id: s
       role={profile.role}
       names={names}
       siteUrl={await siteUrl()}
+      aiEnabled={aiConfigured()}
     />
   );
 }

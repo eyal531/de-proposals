@@ -12,6 +12,7 @@ Proposal (quote) system for Digital Effective, an Israeli digital agency. UI is 
 - Client proposal design: `src/components/proposal/*` + `.pdoc*` styles in `globals.css`. Branding (logo, accent, font, cover) lives in `app_settings.brand`; uploaded logos in Supabase Storage bucket `branding`; default logo files in `public/brand`.
 - `src/lib/pricing/approvals.ts` – approval thresholds (levels none/manager/ceo).
 - `src/lib/greeting.ts` – "לכבוד" block, salutation, gendered wording. `src/lib/email-domain.ts` – business vs free email, website guess.
+- AI (spec 9): `src/lib/ai/site.ts` reads the client site + technical signals; `src/lib/ai/analyze.ts` prompt/schema/sections; `src/lib/ai/claude.ts` raw Messages API with web search + forced `submit_analysis` tool. Routes `/api/ai/analyze` and `/api/ai/rewrite`. AI sections are drafts (`source: "ai"`, `aiKey`) and block sending until approved.
 - `src/app/(app)/proposals/actions.ts` – server actions (create, save, approval, send). Status transitions live here.
 - Client page `src/app/p/[token]` + `src/app/api/p/[token]/*` use the service-role client. Only `toPublic()` output may reach the browser (no internal notes).
 

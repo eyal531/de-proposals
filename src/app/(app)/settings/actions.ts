@@ -15,6 +15,7 @@ const schema = z.object({
   free_email_domains: z.array(z.string().trim().toLowerCase()).max(500),
   default_terms: z.string().max(20000),
   default_media_fee_percent: z.number().min(0).max(100),
+  ai_guidelines: z.string().max(5000),
   brand: z.object({
     logo_url: z.string().max(1000),
     logo_on_dark: z.enum(["invert", "as_is"]),

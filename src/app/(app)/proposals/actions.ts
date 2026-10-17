@@ -190,6 +190,8 @@ const sectionSchema = z.object({
   source: z.enum(["library", "manual", "ai"]),
   status: z.enum(["draft", "edited", "approved"]),
   locked: z.boolean().optional(),
+  aiKey: z.string().max(60).optional(),
+  sources: z.array(z.string().max(500)).max(40).optional(),
 });
 const saveSchema = z.object({
   id: z.string().uuid(),

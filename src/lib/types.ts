@@ -25,6 +25,7 @@ export interface Settings {
   default_terms: string;
   default_media_fee_percent: number;
   brand: Brand;
+  ai_guidelines: string;
 }
 
 export type CoverStyle = "dark" | "accent" | "light";
@@ -93,6 +94,10 @@ export interface Section {
   source: SectionSource;
   status: SectionStatus;
   locked?: boolean;
+  /** stable key of an AI-generated section (e.g. "challenges"), so a re-run replaces it */
+  aiKey?: string;
+  /** internal: pages / search results the AI text was based on */
+  sources?: string[];
 }
 
 export type ProposalStatus =
