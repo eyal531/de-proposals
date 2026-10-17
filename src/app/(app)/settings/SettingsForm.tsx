@@ -5,7 +5,7 @@ import { useRouter } from "next/navigation";
 import type { ApprovalLevel } from "@/lib/pricing/approvals";
 import { LEVEL_LABEL } from "@/lib/pricing/approvals";
 import { ROLE_LABEL, type Profile, type Settings, type UserRole } from "@/lib/types";
-import { saveSettings, updateUser } from "./actions";
+import { saveSettings, sendTestEmail, updateUser } from "./actions";
 
 const LEVELS: ApprovalLevel[] = ["none", "manager", "ceo"];
 
@@ -13,6 +13,7 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
   const router = useRouter();
   const [pending, start] = useTransition();
   const [msg, setMsg] = useState<string | null>(null);
+  const [emailMsg, setEmailMsg] = useState<{ ok: boolean; message: string } | null>(null);
   const [s, setS] = useState({
     ...settings,
     allowed: settings.allowed_email_domains.join(", "),
@@ -122,6 +123,26 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
         <div>
           <label className="label">ספקי דואר פרטיים (לא מזהים מהם אתר לקוח)</label>
           <textarea className="textarea" dir="ltr" value={s.free} onChange={(e) => setS({ ...s, free: e.target.value })} />
+        </div>
+      </section>
+
+      <section className="card space-y-2">
+        <h2 className="font-bold">מיילים</h2>
+        <p className="text-sm text-muted">שליחת מייל בדיקה לכתובת שלך, כדי לוודא ששירות המייל (Brevo) מחובר.</p>
+        <div className="flex flex-wrap items-center gap-3">
+          <button
+            className="btn"
+            disabled={pending}
+            onClick={() =>
+              start(async () => {
+                const r = await sendTestEmail();
+                setEmailMsg(r);
+              })
+            }
+          >
+            שליחת מייל בדיקה
+          </button>
+          {emailMsg && <span className={`text-sm ${emailMsg.ok ? "text-green-700" : "text-red-700"}`}>{emailMsg.message}</span>}
         </div>
       </section>
 

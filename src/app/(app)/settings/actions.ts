@@ -44,3 +44,18 @@ export async function updateUser(id: string, patch: { role?: "admin" | "approver
   revalidatePath("/settings");
   return { ok: true };
 }
+
+export async function sendTestEmail(): Promise<{ ok: boolean; message: string }> {
+  const { profile } = await requireAdmin();
+  const { emailHtml, emailProvider, sendEmail } = await import("@/lib/email");
+  const provider = emailProvider();
+  if (!provider) return { ok: false, message: "לא הוגדר שירות מייל. יש להוסיף BREVO_API_KEY ו-EMAIL_FROM ב-Vercel ולבצע Redeploy." };
+  const r = await sendEmail(
+    profile.email,
+    "בדיקת מייל ממערכת ההצעות",
+    emailHtml({ title: "המייל עובד ✓", lines: ["זהו מייל בדיקה ממערכת ההצעות של דיגיטל אפקטיב.", `שירות: ${provider} · שולח: ${process.env.EMAIL_FROM || "(ברירת מחדל)"}`] }),
+  );
+  return r.ok
+    ? { ok: true, message: `נשלח דרך ${provider} אל ${profile.email}. בדוק את תיבת הדואר (וגם ספאם).` }
+    : { ok: false, message: `השליחה דרך ${provider} נכשלה: ${r.error}` };
+}
