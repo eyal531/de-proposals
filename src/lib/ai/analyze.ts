@@ -68,7 +68,7 @@ export const WEB_SEARCH_TOOL = {
   type: "web_search_20250305",
   name: "web_search",
   max_uses: 5,
-  user_location: { type: "approximate", country: "IL", timezone: "Asia/Jerusalem" },
+  // no user_location: the API does not accept IL as a country; the prompt asks for Hebrew queries about Israel instead
 };
 
 const VOICE: Record<AddressForm, string> = {
@@ -127,7 +127,7 @@ export function buildPrompt(i: AnalysisInput) {
   else parts.push("אין צורך במקטעים נוספים (extra_sections ריק).");
 
   parts.push(
-    "משימה: חפש ברשת 3–5 מתחרים רלוונטיים בישראל באותו תחום ואזור (למשל לפי השירותים המרכזיים של העסק), בדוק בקצרה מה הם עושים טוב, ואז כתוב את הניתוח המלא. השתמש לכל היותר ב-5 חיפושים.",
+    "משימה: חפש ברשת 3–5 מתחרים רלוונטיים בישראל באותו תחום ואזור (למשל לפי השירותים המרכזיים של העסק), בדוק בקצרה מה הם עושים טוב, ואז כתוב את הניתוח המלא. נסח את שאילתות החיפוש בעברית וכלול בהן את העיר או האזור בישראל, כדי לקבל תוצאות ישראליות. השתמש לכל היותר ב-5 חיפושים.",
   );
   return parts.join("\n\n");
 }

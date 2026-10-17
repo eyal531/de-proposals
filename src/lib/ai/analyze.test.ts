@@ -44,3 +44,10 @@ describe("AI analysis → sections", () => {
     expect(p).toContain("seo_topics");
   });
 });
+
+describe("web search tool definition", () => {
+  it("does not send a user_location (IL is not supported by the API)", async () => {
+    const { WEB_SEARCH_TOOL } = await import("./analyze");
+    expect("user_location" in WEB_SEARCH_TOOL).toBe(false);
+  });
+});
