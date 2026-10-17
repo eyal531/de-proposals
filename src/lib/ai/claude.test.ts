@@ -27,7 +27,7 @@ describe("runStructured", () => {
       }),
     ];
     vi.stubGlobal("fetch", vi.fn(async (_url: string, init: RequestInit) => (calls.push(JSON.parse(String(init.body))), replies.shift()!)));
-    const r = await runStructured<{ business_summary: string }>({ system: "s", prompt: "p", submitTool: tool, webSearch: { type: "web_search_20250305", name: "web_search" } });
+    const r = await runStructured<{ business_summary: string }>({ model: "claude-sonnet-5-5", system: "s", prompt: "p", submitTool: tool, webSearch: { type: "web_search_20250305", name: "web_search" } });
     expect(r.result.business_summary).toBe("ok");
     expect(r.urls).toEqual(["https://competitor.co.il/"]);
     expect(r.usage).toMatchObject({ inputTokens: 3000, outputTokens: 1000, searches: 2 });
@@ -44,14 +44,15 @@ describe("runStructured", () => {
       ok({ stop_reason: "tool_use", usage: {}, content: [{ type: "tool_use", id: "t", name: "submit_analysis", input: { a: 1 } }] }),
     ];
     vi.stubGlobal("fetch", vi.fn(async (_u: string, init: RequestInit) => (bodies.push(JSON.parse(String(init.body))), replies.shift()!)));
-    const r = await runStructured<{ a: number }>({ system: "s", prompt: "p", submitTool: tool, webSearch: null });
+    const r = await runStructured<{ a: number }>({ model: "claude-haiku-5-5", system: "s", prompt: "p", submitTool: tool, webSearch: null });
     expect(r.result.a).toBe(1);
+    expect((bodies[0] as { model?: string }).model).toBe("claude-haiku-5-5");
     expect(bodies[1].tool_choice).toEqual({ type: "tool", name: "submit_analysis" });
   });
 
   it("maps API errors to readable Hebrew messages", async () => {
     process.env.ANTHROPIC_API_KEY = "bad";
     vi.stubGlobal("fetch", vi.fn(async () => new Response(JSON.stringify({ error: { message: "invalid x-api-key" } }), { status: 401 })));
-    await expect(runStructured({ system: "s", prompt: "p", submitTool: tool })).rejects.toThrow("מפתח ה-API של Anthropic לא תקין");
+    await expect(runStructured({ model: "claude-haiku-5-5", system: "s", prompt: "p", submitTool: tool })).rejects.toThrow("מפתח ה-API של Anthropic לא תקין");
   });
 });

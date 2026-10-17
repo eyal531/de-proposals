@@ -44,6 +44,7 @@ export function normalizeSettings(row: Record<string, unknown> | null): Settings
     default_media_fee_percent: Number(r.default_media_fee_percent ?? 20),
     brand: { ...DEFAULT_BRAND, ...(r.brand ?? {}) },
     ai_guidelines: r.ai_guidelines ?? "",
+    ai_model: r.ai_model === "quality" ? "quality" : "economy",
   };
 }
 

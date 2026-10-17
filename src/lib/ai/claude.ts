@@ -1,22 +1,14 @@
 import "server-only";
 
-// Minimal Anthropic Messages API client (no SDK). Env: ANTHROPIC_API_KEY, optional AI_MODEL.
-
-export const DEFAULT_MODEL = "claude-sonnet-5-5";
-// USD per million tokens, used only for the cost log
-const PRICES: Record<string, { in: number; out: number }> = {
-  "claude-sonnet-5-5": { in: 2, out: 10 },
-  "claude-opus-5-5": { in: 4, out: 20 },
-  "claude-haiku-5-5": { in: 0.1, out: 0.5 },
-  "claude-fable-5-1": { in: 10, out: 50 },
-};
-const SEARCH_PRICE = 0.01;
+// Minimal Anthropic Messages API client (no SDK). Env: ANTHROPIC_API_KEY. The model is chosen in settings (economy/quality).
+import { AI_MODELS, type AiModelChoice } from "../types";
+import { requestCost } from "./cost";
 
 export function aiConfigured() {
   return !!process.env.ANTHROPIC_API_KEY;
 }
-export function aiModel() {
-  return process.env.AI_MODEL || DEFAULT_MODEL;
+export function aiModel(choice: AiModelChoice | undefined) {
+  return AI_MODELS[choice ?? "economy"] ?? AI_MODELS.economy;
 }
 
 /* eslint-disable @typescript-eslint/no-explicit-any */
@@ -35,6 +27,7 @@ export interface Usage {
 }
 
 interface CallOpts {
+  model: string;
   system: string;
   messages: Message[];
   tools?: ToolDef[];
@@ -47,7 +40,7 @@ async function call(opts: CallOpts): Promise<any> {
     method: "POST",
     headers: { "x-api-key": process.env.ANTHROPIC_API_KEY!, "anthropic-version": "2023-06-01", "content-type": "application/json" },
     body: JSON.stringify({
-      model: aiModel(),
+      model: opts.model,
       max_tokens: opts.maxTokens ?? 8000,
       system: opts.system,
       messages: opts.messages,
@@ -66,15 +59,19 @@ async function call(opts: CallOpts): Promise<any> {
   return json;
 }
 
+// cost is computed per request because some models price a request by its own prompt size
 function addUsage(u: Usage, resp: any) {
-  u.inputTokens += resp?.usage?.input_tokens ?? 0;
-  u.outputTokens += resp?.usage?.output_tokens ?? 0;
-  u.searches += resp?.usage?.server_tool_use?.web_search_requests ?? 0;
+  const inp = resp?.usage?.input_tokens ?? 0;
+  const out = resp?.usage?.output_tokens ?? 0;
+  const searches = resp?.usage?.server_tool_use?.web_search_requests ?? 0;
+  u.inputTokens += inp;
+  u.outputTokens += out;
+  u.searches += searches;
+  u.costUsd += requestCost(u.model, inp, out, searches);
 }
 
 function finishUsage(u: Usage): Usage {
-  const p = PRICES[u.model] ?? PRICES[DEFAULT_MODEL];
-  u.costUsd = Math.round(((u.inputTokens * p.in + u.outputTokens * p.out) / 1_000_000 + u.searches * SEARCH_PRICE) * 10000) / 10000;
+  u.costUsd = Math.round(u.costUsd * 10000) / 10000;
   return u;
 }
 
@@ -82,8 +79,8 @@ function finishUsage(u: Usage): Usage {
  * Runs a conversation that may use web search, and ends with Claude calling the client tool `submitTool.name`.
  * Returns the tool input plus every URL Claude saw in search results.
  */
-export async function runStructured<T>(opts: { system: string; prompt: string; submitTool: ToolDef; webSearch?: ToolDef | null; maxTokens?: number }) {
-  const usage: Usage = { inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, model: aiModel() };
+export async function runStructured<T>(opts: { model: string; system: string; prompt: string; submitTool: ToolDef; webSearch?: ToolDef | null; maxTokens?: number }) {
+  const usage: Usage = { inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, model: opts.model };
   const tools = [...(opts.webSearch ? [opts.webSearch] : []), opts.submitTool];
   const messages: Message[] = [{ role: "user", content: opts.prompt }];
   const urls = new Set<string>();
@@ -91,6 +88,7 @@ export async function runStructured<T>(opts: { system: string; prompt: string; s
   for (let step = 0; step < 6; step++) {
     const forced = step >= 4 || (step > 0 && !opts.webSearch);
     const resp = await call({
+      model: opts.model,
       system: opts.system,
       messages,
       tools: forced ? [opts.submitTool] : tools,
@@ -111,9 +109,9 @@ export async function runStructured<T>(opts: { system: string; prompt: string; s
 }
 
 /** Simple text completion (used for rewriting a section). */
-export async function complete(system: string, prompt: string, maxTokens = 3000) {
-  const usage: Usage = { inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, model: aiModel() };
-  const resp = await call({ system, messages: [{ role: "user", content: prompt }], maxTokens });
+export async function complete(model: string, system: string, prompt: string, maxTokens = 3000) {
+  const usage: Usage = { inputTokens: 0, outputTokens: 0, searches: 0, costUsd: 0, model };
+  const resp = await call({ model, system, messages: [{ role: "user", content: prompt }], maxTokens });
   addUsage(usage, resp);
   const text = (resp.content as Block[])
     .filter((b) => b.type === "text")

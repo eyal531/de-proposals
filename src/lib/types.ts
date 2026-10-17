@@ -26,7 +26,12 @@ export interface Settings {
   default_media_fee_percent: number;
   brand: Brand;
   ai_guidelines: string;
+  ai_model: AiModelChoice;
 }
+
+/** AI engine chosen in settings: economy = Haiku (cheap), quality = Sonnet. */
+export type AiModelChoice = "economy" | "quality";
+export const AI_MODELS: Record<AiModelChoice, string> = { economy: "claude-haiku-5-5", quality: "claude-sonnet-5-5" };
 
 export type CoverStyle = "dark" | "accent" | "light";
 

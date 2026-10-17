@@ -37,6 +37,7 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
         default_terms: s.default_terms,
         default_media_fee_percent: Number(s.default_media_fee_percent),
         ai_guidelines: s.ai_guidelines,
+        ai_model: s.ai_model,
         brand: s.brand,
         approval_rules: r,
       });
@@ -154,6 +155,19 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
           placeholder="לדוגמה: אנחנו כותבים בגובה העיניים, בלי סופרלטיבים. תמיד מדגישים מדידה ושקיפות. לא משתמשים במילה 'מהפכני'."
           onChange={(e) => setS({ ...s, ai_guidelines: e.target.value })}
         />
+        <div className="pt-2">
+          <label className="label">מנוע ה-AI</label>
+          <div className="flex flex-wrap gap-4 text-sm">
+            <label className="flex items-center gap-2">
+              <input type="radio" name="ai_model" checked={s.ai_model === "economy"} onChange={() => setS({ ...s, ai_model: "economy" })} />
+              חסכוני (Claude Haiku) – כ-3–5 סנט לניתוח
+            </label>
+            <label className="flex items-center gap-2">
+              <input type="radio" name="ai_model" checked={s.ai_model === "quality"} onChange={() => setS({ ...s, ai_model: "quality" })} />
+              איכותי (Claude Sonnet) – כ-15–25 סנט לניתוח, עברית מלוטשת יותר
+            </label>
+          </div>
+        </div>
       </section>
 
       <section className="card space-y-2">

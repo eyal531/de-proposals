@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aiConfigured, complete } from "@/lib/ai/claude";
+import { aiConfigured, aiModel, complete } from "@/lib/ai/claude";
 import { memberForApi } from "@/lib/ai/auth";
 
 export const maxDuration = 60;
@@ -34,6 +34,7 @@ export async function POST(req: Request) {
 
   try {
     const { text } = await complete(
+      aiModel(auth.settings.ai_model),
       `אתה עורך תוכן בעברית בסוכנות דיגיטל אפקטיב. אתה משכתב מקטע בהצעת מחיר ללקוח.
 החזר רק את הטקסט המשוכתב, בלי הקדמות, בלי מרכאות ובלי כותרת. שמור על אותו מבנה שורות (תבליטים • ✓ ומספור).
 פנה ללקוח ב${VOICE[d.addressForm]}. אל תמציא מספרים או עובדות שלא מופיעים בטקסט.

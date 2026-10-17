@@ -73,7 +73,7 @@ export function AiPanel(props: {
       <div className="flex flex-wrap items-center gap-2">
         <div className="flex-1">
           <div className="font-medium">ניתוח העסק ב-AI</div>
-          <div className="text-xs text-muted">קורא את אתר הלקוח, מחפש מתחרים וכותב: הבנת העסק, ממצאים מהאתר, אתגרים, תחרות, הזדמנויות, אסטרטגיה ו-30 הימים הראשונים.</div>
+          <div className="text-xs text-muted">קורא את אתר הלקוח, מחפש מתחרים וכותב ניתוח קצר: הבנת העסק, אתגרים והזדמנויות, תחרות, אסטרטגיה וצעדים ראשונים. אפשר להרחיב כל מקטע בכפתור &quot;הרחב&quot;.</div>
         </div>
         <button className="btn btn-primary" disabled={busy || props.locked} onClick={run}>
           {busy ? "מנתח…" : props.hasAi ? "הרצה מחדש" : "יצירת ניתוח"}
@@ -82,7 +82,7 @@ export function AiPanel(props: {
       {busy && (
         <div className="flex items-center gap-2 text-sm">
           <span className="inline-block h-3 w-3 animate-spin rounded-full border-2 border-brand border-t-transparent" aria-hidden />
-          {STEPS[step]} <span className="text-xs text-muted">(בדרך כלל דקה עד שתיים)</span>
+          {STEPS[step]} <span className="text-xs text-muted">(בדרך כלל פחות מדקה)</span>
         </div>
       )}
       {err && <p className="text-sm text-red-700">{err}</p>}

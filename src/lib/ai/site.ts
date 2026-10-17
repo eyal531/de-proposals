@@ -167,9 +167,9 @@ export async function fetchSite(website: string): Promise<SiteScan> {
   if (!home) return { url: base.toString(), ok: false, error: "האתר לא נטען (חסום, איטי או לא קיים)", pages: [], signals: null };
 
   const homeUrl = new URL(home.url);
-  const links = pickInternalLinks(homeUrl, home.html, 5);
+  const links = pickInternalLinks(homeUrl, home.html, 3);
   const others = (await Promise.all(links.map((l) => get(l, 8000)))).filter(Boolean) as { url: string; html: string }[];
-  const pages = [parsePage(home.url, home.html, 6000), ...others.map((o) => parsePage(o.url, o.html, 3500))];
+  const pages = [parsePage(home.url, home.html, 4000), ...others.map((o) => parsePage(o.url, o.html, 2000))];
   return { url: home.url, ok: true, pages, signals: detectSignals(home.url, [home.html, ...others.map((o) => o.html)]) };
 }
 

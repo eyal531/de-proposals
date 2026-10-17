@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { aiConfigured, runStructured } from "@/lib/ai/claude";
+import { aiConfigured, aiModel, runStructured } from "@/lib/ai/claude";
 import { buildPrompt, buildSystem, SUBMIT_TOOL, toSections, WEB_SEARCH_TOOL, type AnalysisResult } from "@/lib/ai/analyze";
 import { fetchSite } from "@/lib/ai/site";
 import { memberForApi } from "@/lib/ai/auth";
@@ -44,11 +44,12 @@ export async function POST(req: Request) {
   try {
     const site = website ? await fetchSite(website) : null;
     const { result, usage, urls } = await runStructured<AnalysisResult>({
+      model: aiModel(settings.ai_model),
       system: buildSystem(settings.ai_guidelines),
       prompt: buildPrompt({ companyName: d.companyName, website, callNotes: d.callNotes, services: svc, addressForm: d.addressForm, guidelines: settings.ai_guidelines, site }),
       submitTool: SUBMIT_TOOL,
       webSearch: WEB_SEARCH_TOOL,
-      maxTokens: 12000,
+      maxTokens: 5000,
     });
     const sources = Array.from(new Set([...(site?.pages.map((p) => p.url) ?? []), ...urls])).slice(0, 30);
     const sections = toSections(result, sources, () => crypto.randomUUID());
