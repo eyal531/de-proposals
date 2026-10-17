@@ -14,6 +14,17 @@ const schema = z.object({
   allowed_email_domains: z.array(z.string().trim().toLowerCase().regex(/^[a-z0-9.-]+\.[a-z]{2,}$/)).max(20),
   free_email_domains: z.array(z.string().trim().toLowerCase()).max(500),
   default_terms: z.string().max(20000),
+  default_media_fee_percent: z.number().min(0).max(100),
+  brand: z.object({
+    logo_url: z.string().max(1000),
+    logo_on_dark: z.enum(["invert", "as_is"]),
+    accent: z.string().regex(/^#[0-9a-fA-F]{6}$/),
+    font: z.string().max(60),
+    cover: z.enum(["dark", "accent", "light"]),
+    phone: z.string().max(40),
+    email: z.string().max(120),
+    website: z.string().max(120),
+  }),
   approval_rules: z.object({
     discountFreeMaxPercent: z.number().min(0).max(100),
     discountManagerMaxPercent: z.number().min(0).max(100),

@@ -8,7 +8,7 @@ export const MODEL_LABEL: Record<PricingModel, string> = {
   hourly: "שעתי",
   hour_bank: "בנק שעות",
   media_percent: "אחוז מהמדיה",
-  hybrid_max: "קבוע או % מדיה – הגבוה",
+  hybrid_max: "ניהול מדיה (עמלה מאוחדת)",
   base_plus_percent: "בסיס + % מדיה",
   media_tiers: "מדרגות לפי מדיה",
   per_unit: "מחיר ליחידה",
@@ -50,12 +50,7 @@ export const MODEL_FIELDS: Record<PricingModel, ParamField[]> = {
     { key: "cap", label: "תקרה (אופציונלי)", type: "number", suffix: "₪" },
     { key: "mediaBudget", label: "תקציב מדיה לשורה (ריק = של ההצעה)", type: "number", suffix: "₪" },
   ],
-  hybrid_max: [
-    { key: "fixed", label: "סכום קבוע מינימלי", type: "number", suffix: "₪" },
-    { key: "percent", label: "אחוז מהמדיה", type: "number", suffix: "%" },
-    { key: "cap", label: "תקרה (אופציונלי)", type: "number", suffix: "₪" },
-    { key: "mediaBudget", label: "תקציב מדיה לשורה (ריק = של ההצעה)", type: "number", suffix: "₪" },
-  ],
+  hybrid_max: [{ key: "fixed", label: "דמי ניהול חודשיים", type: "number", suffix: "₪" }],
   base_plus_percent: [
     { key: "base", label: "בסיס חודשי", type: "number", suffix: "₪" },
     { key: "percent", label: "אחוז מהמדיה", type: "number", suffix: "%" },
@@ -93,11 +88,16 @@ export function toPricingInput(item: ProposalItem, servicesById: Map<string, Ser
   };
 }
 
-export function pricingContext(p: Pick<Proposal, "media_budget" | "commitment_months" | "global_discount_percent">, s: Pick<Settings, "vat_rate" | "rounding">): PricingContext {
+export function pricingContext(
+  p: Pick<Proposal, "media_budget" | "commitment_months" | "global_discount_percent"> & Partial<Pick<Proposal, "media_budgets" | "media_fee_percent">>,
+  s: Pick<Settings, "vat_rate" | "rounding">,
+): PricingContext {
   return {
     vatRate: Number(s.vat_rate),
     rounding: Number(s.rounding),
     mediaBudget: p.media_budget === null || p.media_budget === undefined ? null : Number(p.media_budget),
+    mediaBudgets: (p.media_budgets ?? []).map((m) => ({ ...m, amount: Number(m.amount) || 0 })),
+    mediaFeePercent: p.media_fee_percent === undefined || p.media_fee_percent === null ? undefined : Number(p.media_fee_percent),
     commitmentMonths: Number(p.commitment_months) || 1,
     globalDiscountPercent: Number(p.global_discount_percent) || 0,
   };

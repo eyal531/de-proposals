@@ -8,7 +8,8 @@ Proposal (quote) system for Digital Effective, an Israeli digital agency. UI is 
 - Vercel deploys the app from `main`.
 
 ## Key modules
-- `src/lib/pricing/engine.ts` – pure pricing engine shared by server and browser. All models incl. `hybrid_max` (MAX(fixed, percent × media)). Covered by `engine.test.ts`; add tests for any pricing change.
+- `src/lib/pricing/engine.ts` – pure pricing engine shared by server and browser. Media budgets are per platform (`proposals.media_budgets`); all `hybrid_max` lines form one pooled media-management fee = MAX(sum of their base fees, media_fee_percent × total media) (`MediaPool`). Covered by `engine.test.ts`; add tests for any pricing change.
+- Client proposal design: `src/components/proposal/*` + `.pdoc*` styles in `globals.css`. Branding (logo, accent, font, cover) lives in `app_settings.brand`; uploaded logos in Supabase Storage bucket `branding`; default logo files in `public/brand`.
 - `src/lib/pricing/approvals.ts` – approval thresholds (levels none/manager/ceo).
 - `src/lib/greeting.ts` – "לכבוד" block, salutation, gendered wording. `src/lib/email-domain.ts` – business vs free email, website guess.
 - `src/app/(app)/proposals/actions.ts` – server actions (create, save, approval, send). Status transitions live here.

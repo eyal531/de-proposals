@@ -1,6 +1,7 @@
 import type {
   Billing,
   DeterminedBy,
+  MediaPool,
   PricedLine,
   PricingContext,
   PricingItemInput,
@@ -95,23 +96,10 @@ export function listPrice(
       return { ...base, list: v, mediaBudgetUsed: media, determinedBy: det, explanation: `${pct}% מתקציב המדיה החודשי` };
     }
     case "hybrid_max": {
-      const fixed = n(params.fixed);
-      const pct = n(params.percent);
-      const pctValue = media !== null ? (media * pct) / 100 : 0;
-      let v = Math.max(fixed, pctValue);
-      let det: DeterminedBy = pctValue > fixed ? "percent" : "fixed";
-      if (params.cap && v > params.cap) {
-        v = params.cap;
-        det = "cap";
-      }
-      return {
-        ...base,
-        list: v,
-        mediaBudgetUsed: media,
-        breakEvenBudget: pct > 0 ? (fixed * 100) / pct : null,
-        determinedBy: det,
-        explanation: `${fmt(fixed)} לחודש או ${pct}% מתקציב המדיה – הגבוה מביניהם${params.cap ? ` (עד ${fmt(params.cap)})` : ""}`,
-      };
+      // Media management: the line carries only its base fee. The percentage of the TOTAL media budget
+      // is applied once for all such lines together in computePricing (see MediaPool).
+      const fixed = n(params.fixed) * qty;
+      return { ...base, list: fixed, determinedBy: "fixed", explanation: `דמי ניהול ${fmt(fixed)} לחודש` };
     }
     case "base_plus_percent": {
       const pct = n(params.percent);
@@ -186,8 +174,40 @@ export function priceLine(item: PricingItemInput, ctx: PricingContext): PricedLi
 
 const r2 = (v: number) => Math.round(v * 100) / 100;
 
+export const DEFAULT_MEDIA_FEE_PERCENT = 20;
+
+/** Total monthly media budget: the sum of per-platform rows when present, otherwise the single total. */
+export function mediaTotalOf(ctx: Pick<PricingContext, "mediaBudget" | "mediaBudgets">): number | null {
+  const rows = (ctx.mediaBudgets ?? []).filter((m) => Number.isFinite(Number(m.amount)));
+  if (rows.length) return rows.reduce((a, m) => a + Math.max(Number(m.amount) || 0, 0), 0);
+  return ctx.mediaBudget === null || ctx.mediaBudget === undefined ? null : Number(ctx.mediaBudget);
+}
+
+function mediaPoolOf(items: PricingItemInput[], lines: PricedLine[], ctx: PricingContext, mediaTotal: number): MediaPool | null {
+  const ids = items.filter((i) => i.model === "hybrid_max").map((i) => i.id);
+  const pooled = lines.filter((l) => l.included && ids.includes(l.id));
+  if (!pooled.length) return null;
+  const percent = ctx.mediaFeePercent ?? DEFAULT_MEDIA_FEE_PERCENT;
+  const fixedSum = pooled.reduce((a, l) => a + l.net, 0);
+  const percentValue = roundTo((mediaTotal * percent) / 100, ctx.rounding);
+  const fee = Math.max(fixedSum, percentValue);
+  return {
+    lineIds: pooled.map((l) => l.id),
+    fixedSum,
+    mediaTotal,
+    percent,
+    percentValue,
+    fee,
+    determinedBy: percentValue > fixedSum ? "percent" : "fixed",
+    adjustment: fee - fixedSum,
+    breakEvenMedia: percent > 0 ? (fixedSum * 100) / percent : null,
+  };
+}
+
 export function computePricing(items: PricingItemInput[], ctx: PricingContext): PricingResult {
-  const lines = items.map((i) => priceLine(i, ctx));
+  const mediaTotal = mediaTotalOf(ctx);
+  const effCtx: PricingContext = { ...ctx, mediaBudget: mediaTotal };
+  const lines = items.map((i) => priceLine(i, effCtx));
   const inc = lines.filter((l) => l.included);
   const sum = (arr: PricedLine[], f: (l: PricedLine) => number) => arr.reduce((a, l) => a + f(l), 0);
 
@@ -195,8 +215,11 @@ export function computePricing(items: PricingItemInput[], ctx: PricingContext): 
   const oneTime = inc.filter((l) => l.billing === "one_time");
   const g = Math.min(Math.max(ctx.globalDiscountPercent || 0, 0), 100) / 100;
 
-  const monthlyList = sum(monthly, (l) => l.listPrice);
-  const monthlyLineNet = sum(monthly, (l) => l.net);
+  const mediaPool = mediaPoolOf(items, lines, ctx, mediaTotal ?? 0);
+  const adjustment = mediaPool?.adjustment ?? 0;
+
+  const monthlyList = sum(monthly, (l) => l.listPrice) + adjustment;
+  const monthlyLineNet = sum(monthly, (l) => l.net) + adjustment;
   const oneTimeList = sum(oneTime, (l) => l.listPrice);
   const oneTimeLineNet = sum(oneTime, (l) => l.net);
 
@@ -223,8 +246,10 @@ export function computePricing(items: PricingItemInput[], ctx: PricingContext): 
     oneTimeWithVat: r2(oneTimeNet * (1 + vat)),
     contractValue,
     effectiveDiscountPercent: contractList > 0 ? r2((1 - contractValue / contractList) * 100) : 0,
+    mediaTotal: mediaTotal ?? 0,
+    mediaFee: mediaPool?.fee ?? 0,
   };
-  return { lines, totals };
+  return { lines, totals, mediaPool };
 }
 
 /**

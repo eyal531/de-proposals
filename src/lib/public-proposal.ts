@@ -28,6 +28,8 @@ export interface PublicProposal {
   sections: Pick<Section, "id" | "title" | "body">[];
   terms: string;
   media_budget: number | null;
+  media_budgets: { id: string; platform: string; amount: number }[];
+  media_fee_percent: number;
   commitment_months: number;
   global_discount_percent: number;
   show_list_prices: boolean;
@@ -51,6 +53,8 @@ export function toPublic(p: Proposal, items: ProposalItem[]): { proposal: Public
       sections: (p.sections ?? []).filter((s) => s.visible).map((s) => ({ id: s.id, title: s.title, body: s.body })),
       terms: p.terms,
       media_budget: p.media_budget === null ? null : Number(p.media_budget),
+      media_budgets: (p.media_budgets ?? []).filter((m) => Number(m.amount) > 0).map((m) => ({ id: m.id, platform: m.platform, amount: Number(m.amount) })),
+      media_fee_percent: Number(p.media_fee_percent ?? 20),
       commitment_months: Number(p.commitment_months),
       global_discount_percent: Number(p.global_discount_percent),
       show_list_prices: p.show_list_prices,

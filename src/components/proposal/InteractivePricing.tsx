@@ -2,13 +2,15 @@
 
 import { useMemo, useState } from "react";
 import { applySelection, computePricing } from "@/lib/pricing/engine";
-import type { PricingItemInput } from "@/lib/pricing/types";
+import type { MediaBudgetLine, PricingItemInput } from "@/lib/pricing/types";
 import type { PublicItem } from "@/lib/public-proposal";
 import { ils } from "@/lib/format";
 
 export function InteractivePricing(props: {
   items: PublicItem[];
   mediaBudget: number | null;
+  mediaBudgets: MediaBudgetLine[];
+  mediaFeePercent: number;
   commitmentMonths: number;
   globalDiscountPercent: number;
   showList: boolean;
@@ -23,11 +25,21 @@ export function InteractivePricing(props: {
   const [error, setError] = useState<string | null>(null);
 
   const result = useMemo(
-    () => computePricing(inputs, { vatRate: props.vatRate, rounding: props.rounding, mediaBudget: props.mediaBudget, commitmentMonths: props.commitmentMonths, globalDiscountPercent: props.globalDiscountPercent }),
-    [inputs, props.vatRate, props.rounding, props.mediaBudget, props.commitmentMonths, props.globalDiscountPercent],
+    () =>
+      computePricing(inputs, {
+        vatRate: props.vatRate,
+        rounding: props.rounding,
+        mediaBudget: props.mediaBudget,
+        mediaBudgets: props.mediaBudgets,
+        mediaFeePercent: props.mediaFeePercent,
+        commitmentMonths: props.commitmentMonths,
+        globalDiscountPercent: props.globalDiscountPercent,
+      }),
+    [inputs, props.vatRate, props.rounding, props.mediaBudget, props.mediaBudgets, props.mediaFeePercent, props.commitmentMonths, props.globalDiscountPercent],
   );
   const line = (id: string) => result.lines.find((l) => l.id === id)!;
   const t = result.totals;
+  const pool = result.mediaPool;
 
   async function toggle(id: string, selected: boolean) {
     if (!props.interactive) return;
@@ -42,112 +54,172 @@ export function InteractivePricing(props: {
     }
   }
 
-  const required = inputs.filter((i) => i.kind === "required");
+  const isMgmt = (i: PricingItemInput) => i.model === "hybrid_max";
+  const mgmtRequired = inputs.filter((i) => i.kind === "required" && isMgmt(i));
+  const otherRequired = inputs.filter((i) => i.kind === "required" && !isMgmt(i));
   const optional = inputs.filter((i) => i.kind === "optional");
   const groups = Array.from(new Set(inputs.filter((i) => i.kind === "alternative").map((i) => i.groupKey ?? i.id)));
-  const hasMedia = result.lines.some((l) => l.mediaBudgetUsed !== null || l.breakEvenBudget !== null);
+  const mediaRows = props.mediaBudgets.filter((m) => m.amount > 0);
 
-  const Price = ({ id }: { id: string }) => {
+  const Price = ({ id, muted }: { id: string; muted?: boolean }) => {
     const l = line(id);
     return (
-      <div className="text-left">
-        {props.showList && l.discountAmount > 0 && <div className="num text-xs text-muted line-through">{ils(l.listPrice)}</div>}
-        <div className="num font-bold">{ils(l.net)}</div>
-        <div className="text-xs text-muted">{l.billing === "monthly" ? "לחודש" : "חד-פעמי"}</div>
+      <div className={`pdoc-price ${muted ? "is-muted" : ""}`}>
+        {props.showList && l.discountAmount > 0 && <s className="num">{ils(l.listPrice)}</s>}
+        <span className="num">{ils(l.net)}</span>
+        <small>{l.billing === "monthly" ? "לחודש" : "חד-פעמי"}</small>
       </div>
     );
   };
-  const Explain = ({ id }: { id: string }) => {
-    const l = line(id);
+  const Note = ({ id }: { id: string }) => {
     const item = inputs.find((i) => i.id === id)!;
+    const l = line(id);
     const milestones = item.params.milestones?.filter((m) => m.percent > 0) ?? [];
-    return (
-      <div className="text-xs text-muted">
-        {l.explanation}
-        {l.mediaBudgetUsed !== null && item.model !== "media_tiers" && ` · לפי תקציב מדיה משוער של ${ils(l.mediaBudgetUsed)} לחודש`}
-        {milestones.length > 0 && ` · תשלומים: ${milestones.map((m) => `${m.label} ${m.percent}%`).join(", ")}`}
-      </div>
-    );
+    const text = [
+      item.model === "hybrid_max" ? "" : l.explanation,
+      milestones.length ? `תשלומים: ${milestones.map((m) => `${m.label} ${m.percent}%`).join(", ")}` : "",
+    ]
+      .filter(Boolean)
+      .join(" · ");
+    return text ? <div className="pdoc-note">{text}</div> : null;
   };
 
   return (
-    <section className="card space-y-5">
-      <h2>ההשקעה</h2>
-
-      <div className="divide-y divide-line">
-        {required.map((i) => (
-          <div key={i.id} className="flex items-start justify-between gap-4 py-3">
-            <div>
-              <div className="font-medium">{i.name}</div>
-              <Explain id={i.id} />
+    <div className="pdoc-invest">
+      {mediaRows.length > 0 && (
+        <div className="pdoc-block pdoc-media">
+          <div className="pdoc-block-head">
+            <h3>תקציב מדיה חודשי</h3>
+            <span>משולם ישירות לפלטפורמות הפרסום ואינו חלק מהתשלום אלינו</span>
+          </div>
+          {mediaRows.map((m) => (
+            <div key={m.id} className="pdoc-row">
+              <div>{m.platform}</div>
+              <div className="num">{ils(m.amount)}</div>
             </div>
-            <Price id={i.id} />
+          ))}
+          <div className="pdoc-row pdoc-row-total">
+            <div>סה״כ מדיה בחודש</div>
+            <div className="num">{ils(t.mediaTotal)}</div>
           </div>
-        ))}
-      </div>
+        </div>
+      )}
 
-      {groups.map((g) => {
-        const alts = inputs.filter((i) => i.kind === "alternative" && (i.groupKey ?? i.id) === g);
-        return (
-          <div key={g} className="space-y-2">
-            <div className="text-sm font-bold">{props.interactive ? "בחרו אחת מהאפשרויות:" : "אפשרויות:"}</div>
-            {alts.map((i) => (
-              <label key={i.id} className={`flex cursor-pointer items-start justify-between gap-4 rounded-xl border p-3 ${i.selected ? "border-brand bg-brand-soft" : "border-line"}`}>
-                <div className="flex items-start gap-2">
-                  <input type="radio" className="mt-1" name={`g-${g}`} checked={i.selected} disabled={!props.interactive} onChange={() => toggle(i.id, true)} />
-                  <div>
-                    <div className="font-medium">{i.name}</div>
-                    <Explain id={i.id} />
-                  </div>
-                </div>
-                <Price id={i.id} />
-              </label>
-            ))}
+      {(mgmtRequired.length > 0 || pool) && (
+        <div className="pdoc-block">
+          <div className="pdoc-block-head">
+            <h3>ניהול הקמפיינים</h3>
           </div>
-        );
-      })}
+          {mgmtRequired.map((i) => (
+            <div key={i.id} className="pdoc-row">
+              <div>
+                <div className="pdoc-row-title">{i.name}</div>
+                <Note id={i.id} />
+              </div>
+              <Price id={i.id} muted={pool?.determinedBy === "percent"} />
+            </div>
+          ))}
+          {pool && (
+            <div className="pdoc-fee">
+              <div className="pdoc-fee-rule">
+                עמלת הניהול היא הגבוה מבין סך דמי הניהול ({ils(pool.fixedSum)}) לבין {pool.percent}% מסך תקציב המדיה ({ils(pool.percentValue)})
+              </div>
+              <div className="pdoc-fee-value">
+                <span className="num">{ils(pool.fee)}</span>
+                <small>לחודש</small>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
 
-      {optional.length > 0 && (
-        <div className="space-y-2">
-          <div className="text-sm font-bold">תוספות אפשריות:</div>
-          {optional.map((i) => (
-            <label key={i.id} className={`flex cursor-pointer items-start justify-between gap-4 rounded-xl border p-3 ${i.selected ? "border-brand bg-brand-soft" : "border-line"}`}>
-              <div className="flex items-start gap-2">
-                <input type="checkbox" className="mt-1" checked={i.selected} disabled={!props.interactive} onChange={(e) => toggle(i.id, e.target.checked)} />
-                <div>
-                  <div className="font-medium">{i.name}</div>
-                  <Explain id={i.id} />
-                </div>
+      {otherRequired.length > 0 && (
+        <div className="pdoc-block">
+          <div className="pdoc-block-head">
+            <h3>{mgmtRequired.length || pool ? "שירותים נוספים" : "השירותים"}</h3>
+          </div>
+          {otherRequired.map((i) => (
+            <div key={i.id} className="pdoc-row">
+              <div>
+                <div className="pdoc-row-title">{i.name}</div>
+                <Note id={i.id} />
               </div>
               <Price id={i.id} />
-            </label>
+            </div>
           ))}
         </div>
       )}
 
-      {error && <p className="text-sm text-red-700">{error}</p>}
+      {groups.map((g) => {
+        const alts = inputs.filter((i) => i.kind === "alternative" && (i.groupKey ?? i.id) === g);
+        return (
+          <fieldset key={g} className="pdoc-block">
+            <legend className="pdoc-block-head">
+              <h3>{props.interactive ? "בחרו את המסלול" : "מסלולים"}</h3>
+            </legend>
+            {alts.map((i) => (
+              <label key={i.id} className={`pdoc-choice ${i.selected ? "is-on" : ""}`}>
+                <input type="radio" name={`g-${g}`} checked={i.selected} disabled={!props.interactive} onChange={() => toggle(i.id, true)} />
+                <div>
+                  <div className="pdoc-row-title">{i.name}</div>
+                  <Note id={i.id} />
+                </div>
+                <Price id={i.id} />
+              </label>
+            ))}
+          </fieldset>
+        );
+      })}
 
-      <div className="grid gap-3 rounded-xl bg-slate-50 p-4 sm:grid-cols-2">
+      {optional.length > 0 && (
+        <fieldset className="pdoc-block">
+          <legend className="pdoc-block-head">
+            <h3>אפשר להוסיף</h3>
+          </legend>
+          {optional.map((i) => (
+            <label key={i.id} className={`pdoc-choice ${i.selected ? "is-on" : ""}`}>
+              <input type="checkbox" checked={i.selected} disabled={!props.interactive} onChange={(e) => toggle(i.id, e.target.checked)} />
+              <div>
+                <div className="pdoc-row-title">{i.name}</div>
+                <Note id={i.id} />
+              </div>
+              <Price id={i.id} />
+            </label>
+          ))}
+        </fieldset>
+      )}
+
+      {error && <p className="pdoc-error">{error}</p>}
+
+      <div className="pdoc-totals">
         {t.monthlyNet > 0 && (
           <div>
-            <div className="text-sm text-muted">תשלום חודשי</div>
-            <div className="num text-2xl font-bold text-brand">{ils(t.monthlyNet)}</div>
-            <div className="text-xs text-muted">
-              + מע״מ ({ils(t.monthlyWithVat)} כולל מע״מ){props.commitmentMonths > 1 ? ` · התחייבות ל-${props.commitmentMonths} חודשים` : ""}
+            <div className="pdoc-totals-label">תשלום חודשי</div>
+            <div className="pdoc-totals-value num">{ils(t.monthlyNet)}</div>
+            <div className="pdoc-totals-sub">
+              לפני מע״מ · {ils(t.monthlyWithVat)} כולל מע״מ
+              {props.commitmentMonths > 1 ? ` · התחייבות ל-${props.commitmentMonths} חודשים` : ""}
             </div>
-            {t.globalDiscountMonthly > 0 && <div className="text-xs text-green-700">כולל הנחה של {props.globalDiscountPercent}%</div>}
+            {t.globalDiscountMonthly > 0 && <div className="pdoc-totals-sub">כולל הנחה של {props.globalDiscountPercent}%</div>}
           </div>
         )}
         {t.oneTimeNet > 0 && (
           <div>
-            <div className="text-sm text-muted">תשלום חד-פעמי</div>
-            <div className="num text-2xl font-bold text-brand">{ils(t.oneTimeNet)}</div>
-            <div className="text-xs text-muted">+ מע״מ ({ils(t.oneTimeWithVat)} כולל מע״מ)</div>
-            {t.globalDiscountOneTime > 0 && <div className="text-xs text-green-700">כולל הנחה של {props.globalDiscountPercent}%</div>}
+            <div className="pdoc-totals-label">תשלום חד-פעמי</div>
+            <div className="pdoc-totals-value num">{ils(t.oneTimeNet)}</div>
+            <div className="pdoc-totals-sub">לפני מע״מ · {ils(t.oneTimeWithVat)} כולל מע״מ</div>
+            {t.globalDiscountOneTime > 0 && <div className="pdoc-totals-sub">כולל הנחה של {props.globalDiscountPercent}%</div>}
+          </div>
+        )}
+        {t.mediaTotal > 0 && (
+          <div className="pdoc-totals-media">
+            <div className="pdoc-totals-label">ובנוסף, תקציב מדיה</div>
+            <div className="pdoc-totals-value is-small num">{ils(t.mediaTotal)}</div>
+            <div className="pdoc-totals-sub">לחודש, ישירות לפלטפורמות</div>
           </div>
         )}
       </div>
-      {hasMedia && <p className="text-xs text-muted">תקציב המדיה משולם ישירות לפלטפורמות הפרסום ואינו כלול בסכומים. דמי הניהול בפועל מחושבים לפי תקציב המדיה בפועל בכל חודש.</p>}
-    </section>
+      {pool && <p className="pdoc-note">עמלת הניהול בפועל מחושבת בכל חודש לפי תקציב המדיה שהוצא בפועל.</p>}
+    </div>
   );
 }

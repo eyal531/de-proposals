@@ -14,7 +14,7 @@ export default async function PreviewPage({ params }: { params: Promise<{ id: st
   return (
     <div>
       <div className="no-print rounded-lg bg-amber-50 p-2 text-center text-sm">תצוגה מקדימה – כך הלקוח יראה את ההצעה (לפי הגרסה השמורה). בחירות כאן לא נשמרות.</div>
-      <ProposalDocument proposal={pub.proposal} items={pub.items} companyName={settings.company_name} vatRate={settings.vat_rate} rounding={settings.rounding} mode="preview" interactive />
+      <ProposalDocument proposal={pub.proposal} items={pub.items} brand={settings.brand} vatRate={settings.vat_rate} rounding={settings.rounding} mode="preview" interactive />
     </div>
   );
 }

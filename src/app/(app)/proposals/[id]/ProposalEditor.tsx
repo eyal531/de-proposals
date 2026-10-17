@@ -7,7 +7,7 @@ import { ParamsEditor } from "@/components/ParamsEditor";
 import { computePricing, usesMediaBudget } from "@/lib/pricing/engine";
 import { checkApprovals, LEVEL_LABEL } from "@/lib/pricing/approvals";
 import { KIND_LABEL, MODEL_LABEL, pricingContext, toPricingInput, usesQuantity } from "@/lib/pricing/meta";
-import type { ItemKind, PricingModel, PricingParams } from "@/lib/pricing/types";
+import type { ItemKind, MediaBudgetLine, PricingModel, PricingParams } from "@/lib/pricing/types";
 import { buildGreeting, type AddressForm, type Recipient } from "@/lib/greeting";
 import { dateTimeHe, ils, isExpired } from "@/lib/format";
 import { STATUS_COLOR, STATUS_LABEL, type Approval, type Proposal, type ProposalEvent, type ProposalItem, type Section, type Service, type Settings, type UserRole } from "@/lib/types";
@@ -61,7 +61,9 @@ export function ProposalEditor(props: {
   const [intro, setIntro] = useState(p0.intro);
   const [sections, setSections] = useState<Section[]>(p0.sections ?? []);
   const [terms, setTerms] = useState(p0.terms);
-  const [mediaBudget, setMediaBudget] = useState<number | null>(p0.media_budget === null ? null : Number(p0.media_budget));
+  const [mediaBudget] = useState<number | null>(p0.media_budget === null ? null : Number(p0.media_budget));
+  const [mediaRows, setMediaRows] = useState<MediaBudgetLine[]>((p0.media_budgets ?? []).map((m) => ({ ...m, amount: Number(m.amount) || 0 })));
+  const [mediaFeePercent, setMediaFeePercent] = useState(Number(p0.media_fee_percent ?? settings.default_media_fee_percent ?? 20));
   const [commitment, setCommitment] = useState(Number(p0.commitment_months));
   const [globalDiscount, setGlobalDiscount] = useState(Number(p0.global_discount_percent));
   const [showList, setShowList] = useState(p0.show_list_prices);
@@ -87,10 +89,13 @@ export function ProposalEditor(props: {
   const byId = useMemo(() => new Map(services.map((s) => [s.id, s])), [services]);
   const calc = useMemo(() => {
     const inputs = items.map((it, i) => toPricingInput({ ...it, proposal_id: p0.id, sort: i }, byId));
-    const ctx = pricingContext({ media_budget: mediaBudget, commitment_months: commitment, global_discount_percent: globalDiscount }, settings);
+    const ctx = pricingContext(
+      { media_budget: mediaRows.length ? null : mediaBudget, media_budgets: mediaRows, media_fee_percent: mediaFeePercent, commitment_months: commitment, global_discount_percent: globalDiscount },
+      settings,
+    );
     const pricing = computePricing(inputs, ctx);
     return { pricing, approval: checkApprovals(inputs, ctx, pricing, settings.approval_rules) };
-  }, [items, mediaBudget, commitment, globalDiscount, settings, byId, p0.id]);
+  }, [items, mediaBudget, mediaRows, mediaFeePercent, commitment, globalDiscount, settings, byId, p0.id]);
   const lineOf = (id: string) => calc.pricing.lines.find((l) => l.id === id);
 
   const greeting = buildGreeting({ recipients, companyName });
@@ -144,7 +149,9 @@ export function ProposalEditor(props: {
       intro,
       sections,
       terms,
-      media_budget: mediaBudget,
+      media_budget: mediaRows.length ? mediaRows.reduce((a, m) => a + (Number(m.amount) || 0), 0) : mediaBudget,
+      media_budgets: mediaRows.map((m) => ({ ...m, amount: Number(m.amount) || 0 })),
+      media_fee_percent: mediaFeePercent,
       commitment_months: commitment,
       global_discount_percent: globalDiscount,
       show_list_prices: showList,
@@ -250,15 +257,14 @@ export function ProposalEditor(props: {
 
         {/* pricing */}
         <section className="card space-y-4">
-          <div className="flex flex-wrap items-end gap-3">
-            <h2 className="font-bold">שירותים ותמחור</h2>
-            {hasMedia && (
-              <div className="ms-auto w-56">
-                <label className="label">תקציב מדיה חודשי משוער (₪)</label>
-                <input className="input num" type="number" value={mediaBudget ?? ""} disabled={locked} onChange={(e) => mark(setMediaBudget)(e.target.value === "" ? null : Number(e.target.value))} />
-              </div>
-            )}
-          </div>
+          <h2 className="font-bold">שירותים ותמחור</h2>
+
+          <MediaBudgetsEditor
+            rows={mediaRows}
+            locked={locked}
+            show={hasMedia || mediaRows.length > 0}
+            onChange={(rows) => mark(setMediaRows)(rows)}
+          />
 
           <div className="space-y-2">
             {items.map((it, idx) => {
@@ -306,9 +312,7 @@ export function ProposalEditor(props: {
                   {line && (
                     <div className="mt-1 text-xs text-muted">
                       {line.explanation}
-                      {line.breakEvenBudget ? ` · נקודת שוויון: תקציב ${ils(line.breakEvenBudget)}` : ""}
-                      {line.determinedBy === "fixed" && line.mediaBudgetUsed !== null ? " · קבע: הסכום הקבוע" : ""}
-                      {line.determinedBy === "percent" && it.pricing_model === "hybrid_max" ? " · קבע: האחוז" : ""}
+                      {it.pricing_model === "hybrid_max" ? " · נכלל בעמלת ניהול המדיה המאוחדת" : ""}
                       {line.discountAmount > 0 ? ` · מחירון ${ils(line.listPrice)}, הנחה ${ils(line.discountAmount)}` : ""}
                       {it.is_custom ? " · פריט חופשי" : ""}
                     </div>
@@ -372,6 +376,10 @@ export function ProposalEditor(props: {
               );
             })}
           </div>
+
+          {calc.pricing.mediaPool && (
+            <MediaPoolBox pool={calc.pricing.mediaPool} percent={mediaFeePercent} locked={locked} onPercent={(v) => mark(setMediaFeePercent)(v)} />
+          )}
 
           {!locked && (
             <div className="flex gap-2">
@@ -485,6 +493,7 @@ export function ProposalEditor(props: {
           {t.globalDiscountOneTime > 0 && <Row label="מתוכו הנחה כללית" value={`-${ils(t.globalDiscountOneTime)}`} />}
           <Row label={`חודשי כולל מע״מ ${settings.vat_rate}%`} value={ils(t.monthlyWithVat)} />
           <Row label="חד-פעמי כולל מע״מ" value={ils(t.oneTimeWithVat)} />
+          {t.mediaTotal > 0 && <Row label="תקציב מדיה חודשי (לידיעה)" value={ils(t.mediaTotal)} />}
           <div className="border-t border-line pt-2" />
           <Row label={`ערך התקשרות (${commitment} ח׳)`} value={ils(t.contractValue)} />
           <Row label="הנחה מצטברת" value={`${t.effectiveDiscountPercent.toFixed(1)}%`} />
@@ -683,6 +692,100 @@ function ApprovalBox({ approval, canDecide, requester, onDecide, pending }: { ap
           </div>
         </>
       )}
+    </div>
+  );
+}
+
+const PLATFORMS = ["מטא (פייסבוק ואינסטגרם)", "גוגל", "יוטיוב", "טיקטוק", "לינקדאין", "טאבולה / אאוטבריין", "אחר"];
+
+function MediaBudgetsEditor({ rows, onChange, locked, show }: { rows: MediaBudgetLine[]; onChange: (r: MediaBudgetLine[]) => void; locked: boolean; show: boolean }) {
+  const total = rows.reduce((a, m) => a + (Number(m.amount) || 0), 0);
+  const used = new Set(rows.map((r) => r.platform));
+  const add = () => onChange([...rows, { id: newId(), platform: PLATFORMS.find((p) => !used.has(p)) ?? "אחר", amount: 0 }]);
+  if (!show)
+    return locked ? null : (
+      <button className="btn btn-sm" onClick={add}>
+        + תקציב מדיה
+      </button>
+    );
+  return (
+    <div className="rounded-xl border border-line bg-slate-50 p-3">
+      <div className="mb-2 flex items-baseline justify-between">
+        <div className="font-medium">תקציבי מדיה חודשיים</div>
+        <div className="text-xs text-muted">משולם ישירות לפלטפורמות, לא כלול במחיר</div>
+      </div>
+      <div className="space-y-1.5">
+        {rows.map((r, i) => (
+          <div key={r.id} className="flex gap-2">
+            <input
+              className="input flex-1"
+              list="media-platforms"
+              value={r.platform}
+              disabled={locked}
+              onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, platform: e.target.value } : x)))}
+            />
+            <input
+              className="input num w-36"
+              type="number"
+              min={0}
+              value={r.amount || ""}
+              placeholder="₪ לחודש"
+              disabled={locked}
+              onChange={(e) => onChange(rows.map((x, j) => (j === i ? { ...x, amount: Number(e.target.value) || 0 } : x)))}
+            />
+            <button className="btn btn-sm btn-danger" disabled={locked} onClick={() => onChange(rows.filter((_, j) => j !== i))} aria-label="הסרה">
+              ✕
+            </button>
+          </div>
+        ))}
+        <datalist id="media-platforms">
+          {PLATFORMS.map((p) => (
+            <option key={p} value={p} />
+          ))}
+        </datalist>
+      </div>
+      <div className="mt-2 flex items-center justify-between">
+        {!locked ? (
+          <button className="btn btn-sm" onClick={add}>
+            + פלטפורמה
+          </button>
+        ) : (
+          <span />
+        )}
+        <div className="text-sm">
+          סה״כ מדיה: <span className="num font-bold">{ils(total)}</span>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function MediaPoolBox({ pool, percent, onPercent, locked }: { pool: NonNullable<ReturnType<typeof computePricing>["mediaPool"]>; percent: number; onPercent: (v: number) => void; locked: boolean }) {
+  const pctWins = pool.determinedBy === "percent";
+  return (
+    <div className="rounded-xl border border-brand/30 bg-brand-soft p-3 text-sm">
+      <div className="mb-2 flex flex-wrap items-center gap-2">
+        <div className="font-medium">עמלת ניהול מדיה</div>
+        <label className="ms-auto flex items-center gap-1 text-xs text-muted">
+          אחוז מסך המדיה
+          <input className="input num w-16 py-1" type="number" min={0} max={100} value={percent} disabled={locked} onChange={(e) => onPercent(Number(e.target.value) || 0)} />%
+        </label>
+      </div>
+      <div className="grid gap-1 sm:grid-cols-3">
+        <div className={!pctWins ? "font-bold" : "text-muted"}>
+          סך דמי הניהול: <span className="num">{ils(pool.fixedSum)}</span>
+        </div>
+        <div className={pctWins ? "font-bold" : "text-muted"}>
+          {pool.percent}% מסך המדיה ({ils(pool.mediaTotal)}): <span className="num">{ils(pool.percentValue)}</span>
+        </div>
+        <div className="font-bold">
+          העמלה: <span className="num">{ils(pool.fee)}</span> לחודש
+        </div>
+      </div>
+      <div className="mt-1 text-xs text-muted">
+        {pctWins ? `האחוז גבוה מסך דמי הניהול, ולכן נוספת השלמה של ${ils(pool.adjustment)}.` : "סך דמי הניהול גבוה מהאחוז, ולכן הוא העמלה."}
+        {pool.breakEvenMedia ? ` האחוז מתחיל לקבוע מתקציב מדיה כולל של ${ils(pool.breakEvenMedia)}.` : ""}
+      </div>
     </div>
   );
 }

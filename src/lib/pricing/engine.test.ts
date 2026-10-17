@@ -5,30 +5,77 @@ import type { PricingContext, PricingItemInput } from "./types";
 
 const ctx: PricingContext = { vatRate: 18, rounding: 1, mediaBudget: null, commitmentMonths: 6, globalDiscountPercent: 0 };
 
-const hybrid = (media: number | null, cap?: number) =>
-  listPrice("hybrid_max", { fixed: 4000, percent: 20, cap: cap ?? null }, 1, media);
+const mgmt = (id: string, fixed: number, extra: Partial<PricingItemInput> = {}): PricingItemInput => ({
+  id,
+  name: id,
+  model: "hybrid_max",
+  params: { fixed },
+  kind: "required",
+  selected: true,
+  ...extra,
+});
+const media = (...amounts: number[]) => amounts.map((amount, i) => ({ id: `m${i}`, platform: `p${i}`, amount }));
 
-describe("hybrid_max – הגבוה מבין 4,000 ₪ ל-20% מהמדיה (טבלת הדוגמה באפיון 6.2)", () => {
+describe("עמלת ניהול מדיה מאוחדת – הגבוה מבין סך דמי הניהול ל-20% מסך המדיה", () => {
   it.each([
     [10000, 4000, "fixed"],
     [20000, 4000, "fixed"],
     [35000, 7000, "percent"],
     [60000, 12000, "percent"],
-  ])("מדיה %i → %i (%s)", (media, fee, by) => {
-    const r = hybrid(media);
-    expect(r.list).toBe(fee);
-    expect(r.determinedBy).toBe(by);
+  ])("שירות אחד, מדיה %i → %i (%s)", (m, fee, by) => {
+    const r = computePricing([mgmt("fb", 4000)], { ...ctx, mediaBudgets: media(m) });
+    expect(r.mediaPool!.fee).toBe(fee);
+    expect(r.mediaPool!.determinedBy).toBe(by);
+    expect(r.totals.monthlyNet).toBe(fee);
+    expect(r.totals.mediaFee).toBe(fee);
   });
-  it("נקודת שוויון 20,000 ₪", () => expect(hybrid(1).breakEvenBudget).toBe(20000));
-  it("תקרה", () => {
-    const r = hybrid(60000, 10000);
-    expect(r.list).toBe(10000);
-    expect(r.determinedBy).toBe("cap");
+
+  it("שני שירותי ניהול, מדיה כוללת משתי פלטפורמות – האחוז גובר", () => {
+    // fixed 4,000 + 4,000 = 8,000; media 20,000 + 30,000 = 50,000 → 20% = 10,000
+    const r = computePricing([mgmt("fb", 4000), mgmt("google", 4000)], { ...ctx, mediaBudgets: media(20000, 30000) });
+    expect(r.mediaPool).toMatchObject({ fixedSum: 8000, mediaTotal: 50000, percentValue: 10000, fee: 10000, adjustment: 2000, determinedBy: "percent", breakEvenMedia: 40000 });
+    expect(r.totals.monthlyNet).toBe(10000);
+    expect(r.totals.mediaTotal).toBe(50000);
   });
-  it("ללא תקציב – הסכום הקבוע", () => expect(hybrid(null).list).toBe(4000));
-  it("תקציב ברמת השורה גובר על תקציב ההצעה", () => {
-    expect(listPrice("hybrid_max", { fixed: 4000, percent: 20, mediaBudget: 50000 }, 1, 10000).list).toBe(10000);
+
+  it("שני שירותי ניהול – סך דמי הניהול גובר", () => {
+    const r = computePricing([mgmt("fb", 4000), mgmt("google", 4000)], { ...ctx, mediaBudgets: media(10000, 15000) });
+    expect(r.mediaPool).toMatchObject({ fee: 8000, adjustment: 0, determinedBy: "fixed" });
   });
+
+  it("אחוז שונה ברמת ההצעה", () => {
+    const r = computePricing([mgmt("fb", 4000)], { ...ctx, mediaBudgets: media(50000), mediaFeePercent: 15 });
+    expect(r.mediaPool!.fee).toBe(7500);
+  });
+
+  it("שירות ניהול אופציונלי שלא נבחר לא נכנס לבסיס", () => {
+    const r = computePricing([mgmt("fb", 4000), mgmt("tiktok", 3500, { kind: "optional", selected: false })], { ...ctx, mediaBudgets: media(10000) });
+    expect(r.mediaPool).toMatchObject({ fixedSum: 4000, fee: 4000, lineIds: ["fb"] });
+  });
+
+  it("הנחה על שירות ניהול מקטינה את הבסיס", () => {
+    const r = computePricing([mgmt("fb", 4000, { discount: { type: "percent", value: 25 } })], { ...ctx, mediaBudgets: media(10000) });
+    expect(r.mediaPool).toMatchObject({ fixedSum: 3000, fee: 3000 });
+  });
+
+  it("ללא שורות ניהול – אין עמלה מאוחדת, המדיה מוצגת לידיעה", () => {
+    const r = computePricing([{ id: "seo", name: "SEO", model: "fixed_monthly", params: { amount: 5000 }, kind: "required", selected: true }], { ...ctx, mediaBudgets: media(30000) });
+    expect(r.mediaPool).toBeNull();
+    expect(r.totals.monthlyNet).toBe(5000);
+    expect(r.totals.mediaTotal).toBe(30000);
+  });
+
+  it("תקציב כולל בודד כשאין פירוט לפי פלטפורמה", () => {
+    const r = computePricing([mgmt("fb", 4000)], { ...ctx, mediaBudget: 35000 });
+    expect(r.mediaPool!.fee).toBe(7000);
+  });
+
+  it("אחוז ממדיה ומדרגות משתמשים בסך המדיה הכולל", () => {
+    const r = computePricing([{ id: "x", name: "x", model: "media_percent", params: { percent: 10 }, kind: "required", selected: true }], { ...ctx, mediaBudgets: media(10000, 20000) });
+    expect(r.totals.monthlyNet).toBe(3000);
+  });
+
+  it("listPrice של שורת ניהול מחזיר רק את דמי הבסיס", () => expect(listPrice("hybrid_max", { fixed: 4000, percent: 20 }, 1, 60000).list).toBe(4000));
 });
 
 describe("מודלים נוספים", () => {

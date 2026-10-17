@@ -139,6 +139,7 @@ export async function createProposal(input: z.input<typeof createSchema>): Promi
       sections: sectionsFromBlocks((blocks ?? []) as ContentBlock[], d.serviceIds),
       terms: settings.default_terms,
       commitment_months: settings.default_commitment_months,
+      media_fee_percent: settings.default_media_fee_percent,
       valid_until: addDays(settings.default_validity_days),
       created_by: user.id,
     })
@@ -202,6 +203,8 @@ const saveSchema = z.object({
   sections: z.array(sectionSchema).max(40),
   terms: z.string().max(20000),
   media_budget: z.number().min(0).nullable(),
+  media_budgets: z.array(z.object({ id: z.string().max(60), platform: z.string().trim().max(80), amount: z.number().min(0).max(100_000_000) })).max(20).default([]),
+  media_fee_percent: z.number().min(0).max(100).default(20),
   commitment_months: z.number().int().min(1).max(60),
   global_discount_percent: z.number().min(0).max(100),
   show_list_prices: z.boolean(),
@@ -231,9 +234,12 @@ export async function saveProposal(payload: SavePayload): Promise<ActionResult<{
   });
 
   const { items, id, ...fields } = d;
+  // keep the single total in sync with the per-platform rows
+  const mediaRows = fields.media_budgets.filter((m) => m.platform || m.amount);
+  const media_budget = mediaRows.length ? mediaRows.reduce((a, m) => a + m.amount, 0) : fields.media_budget;
   const { error } = await supabase
     .from("proposals")
-    .update({ ...fields, sections, website: normalizeWebsite(fields.website ?? "") })
+    .update({ ...fields, media_budgets: mediaRows, media_budget, sections, website: normalizeWebsite(fields.website ?? "") })
     .eq("id", id);
   if (error) return fail(error.message);
 
@@ -363,6 +369,8 @@ export async function duplicateProposal(id: string): Promise<ActionResult<{ id: 
       sections: proposal.sections,
       terms: proposal.terms,
       media_budget: proposal.media_budget,
+      media_budgets: proposal.media_budgets,
+      media_fee_percent: proposal.media_fee_percent,
       commitment_months: proposal.commitment_months,
       global_discount_percent: proposal.global_discount_percent,
       show_list_prices: proposal.show_list_prices,

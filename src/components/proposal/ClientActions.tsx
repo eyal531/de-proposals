@@ -20,9 +20,9 @@ export function ClientActions({ token, canSign, addressForm }: { token?: string;
     const c = canvas.current;
     if (!c) return;
     const ctx = c.getContext("2d")!;
-    ctx.lineWidth = 2.2;
+    ctx.lineWidth = 3;
     ctx.lineCap = "round";
-    ctx.strokeStyle = "#1d2433";
+    ctx.strokeStyle = "#000";
     const pos = (e: PointerEvent) => {
       const r = c.getBoundingClientRect();
       return { x: ((e.clientX - r.left) * c.width) / r.width, y: ((e.clientY - r.top) * c.height) / r.height };
@@ -88,61 +88,65 @@ export function ClientActions({ token, canSign, addressForm }: { token?: string;
   return (
     <>
       {canSign && (
-        <section className="card no-print space-y-4">
-          <h2>אישור ההצעה</h2>
-          {done ? (
-            <p className="text-green-700">תודה! ההצעה אושרה.</p>
-          ) : (
-            <>
-              <div className="grid gap-3 sm:grid-cols-2">
-                <div>
-                  <label className="label">שם מלא</label>
-                  <input className="input" value={name} onChange={(e) => setName(e.target.value)} />
+        <section className="pdoc-section no-print" id="approve">
+          <h2 className="pdoc-h2">אישור ההצעה</h2>
+          <div className="pdoc-section-body">
+            {done ? (
+              <p className="pdoc-success">תודה! ההצעה אושרה.</p>
+            ) : (
+              <div className="pdoc-sign">
+                <div className="pdoc-sign-fields">
+                  <label>
+                    <span>שם מלא</span>
+                    <input className="pdoc-input" value={name} onChange={(e) => setName(e.target.value)} autoComplete="name" />
+                  </label>
+                  <label>
+                    <span>תפקיד</span>
+                    <input className="pdoc-input" value={role} onChange={(e) => setRole(e.target.value)} autoComplete="organization-title" />
+                  </label>
                 </div>
-                <div>
-                  <label className="label">תפקיד</label>
-                  <input className="input" value={role} onChange={(e) => setRole(e.target.value)} />
+                <div className="pdoc-sign-pad">
+                  <canvas ref={canvas} width={900} height={220} aria-label="אזור חתימה" />
+                  <div className="pdoc-sign-line">
+                    <span>חתימה</span>
+                    <button type="button" onClick={clear}>
+                      ניקוי
+                    </button>
+                  </div>
                 </div>
+                <label className="pdoc-agree">
+                  <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
+                  <span>
+                    {pick(addressForm, { plural: "קראנו ואנו מאשרים", male: "קראתי ואני מאשר", female: "קראתי ואני מאשרת" })} את ההצעה, את הבחירות שסומנו ואת התנאים.
+                  </span>
+                </label>
+                {err && <p className="pdoc-error">{err}</p>}
+                <button className="pdoc-btn" disabled={busy || !agree || name.trim().length < 2 || !hasInk} onClick={sign}>
+                  {busy ? "שומר…" : "אישור וחתימה"}
+                </button>
               </div>
-              <div>
-                <div className="flex items-center justify-between">
-                  <label className="label">חתימה</label>
-                  <button type="button" className="text-xs text-muted underline" onClick={clear}>
-                    ניקוי
-                  </button>
-                </div>
-                <canvas ref={canvas} width={600} height={160} className="h-32 w-full touch-none rounded-xl border border-dashed border-line bg-white" />
-              </div>
-              <label className="flex items-start gap-2 text-sm">
-                <input type="checkbox" className="mt-1" checked={agree} onChange={(e) => setAgree(e.target.checked)} />
-                <span>
-                  {pick(addressForm, { plural: "קראנו ואנו מאשרים", male: "קראתי ואני מאשר", female: "קראתי ואני מאשרת" })} את ההצעה, את הבחירות שסומנו ואת התנאים.
-                </span>
-              </label>
-              {err && <p className="text-sm text-red-700">{err}</p>}
-              <button className="btn btn-primary w-full sm:w-auto" disabled={busy || !agree || name.trim().length < 2 || !hasInk} onClick={sign}>
-                {busy ? "שומר…" : "אישור וחתימה"}
-              </button>
-            </>
-          )}
+            )}
+          </div>
         </section>
       )}
 
-      <section className="card no-print space-y-3">
-        <h2>{pick(addressForm, { plural: "יש לכם שאלה?", male: "יש לך שאלה?", female: "יש לך שאלה?" })}</h2>
-        {qSent ? (
-          <p className="text-sm text-green-700">השאלה נשלחה. נחזור אליכם בהקדם.</p>
-        ) : (
-          <div className="flex flex-col gap-2 sm:flex-row">
-            <textarea className="textarea min-h-12 flex-1" value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="כתבו כאן ונחזור אליכם" />
-            <button className="btn self-end" onClick={ask} disabled={!question.trim()}>
-              שליחה
-            </button>
-          </div>
-        )}
-        <button className="btn btn-sm" onClick={() => window.print()}>
-          הורדה / הדפסה כ-PDF
-        </button>
+      <section className="pdoc-section no-print">
+        <h2 className="pdoc-h2">{pick(addressForm, { plural: "יש לכם שאלה?", male: "יש לך שאלה?", female: "יש לך שאלה?" })}</h2>
+        <div className="pdoc-section-body">
+          {qSent ? (
+            <p className="pdoc-success">השאלה נשלחה. נחזור אליכם בהקדם.</p>
+          ) : (
+            <div className="pdoc-ask">
+              <textarea className="pdoc-input" rows={3} value={question} onChange={(e) => setQuestion(e.target.value)} placeholder="כתבו כאן ונחזור אליכם" />
+              <button className="pdoc-btn is-ghost" onClick={ask} disabled={!question.trim()}>
+                שליחת השאלה
+              </button>
+            </div>
+          )}
+          <button className="pdoc-link" onClick={() => window.print()}>
+            שמירה כ-PDF / הדפסה
+          </button>
+        </div>
       </section>
     </>
   );

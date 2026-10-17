@@ -6,7 +6,7 @@ import type { Proposal, ProposalItem, Service, Settings } from "./types";
 export const LEVEL_RANK: Record<ApprovalLevel, number> = { none: 0, manager: 1, ceo: 2 };
 
 export function calcProposal(
-  proposal: Pick<Proposal, "media_budget" | "commitment_months" | "global_discount_percent">,
+  proposal: Pick<Proposal, "media_budget" | "commitment_months" | "global_discount_percent"> & Partial<Pick<Proposal, "media_budgets" | "media_fee_percent">>,
   items: ProposalItem[],
   services: Service[],
   settings: Settings,

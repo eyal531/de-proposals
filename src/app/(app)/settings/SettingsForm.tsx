@@ -6,6 +6,7 @@ import type { ApprovalLevel } from "@/lib/pricing/approvals";
 import { LEVEL_LABEL } from "@/lib/pricing/approvals";
 import { ROLE_LABEL, type Profile, type Settings, type UserRole } from "@/lib/types";
 import { saveSettings, sendTestEmail, updateUser } from "./actions";
+import { BrandEditor } from "./BrandEditor";
 
 const LEVELS: ApprovalLevel[] = ["none", "manager", "ceo"];
 
@@ -34,6 +35,8 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
         allowed_email_domains: split(s.allowed),
         free_email_domains: split(s.free),
         default_terms: s.default_terms,
+        default_media_fee_percent: Number(s.default_media_fee_percent),
+        brand: s.brand,
         approval_rules: r,
       });
       setMsg(res.ok ? "נשמר" : res.error);
@@ -76,6 +79,21 @@ export function SettingsForm({ settings, users, me }: { settings: Settings; user
         <div>
           <label className="label">התחייבות ברירת מחדל (חודשים)</label>
           {num(s.default_commitment_months, (v) => setS({ ...s, default_commitment_months: v }))}
+        </div>
+      </section>
+
+      <BrandEditor brand={s.brand} onChange={(brand) => setS({ ...s, brand })} />
+
+      <section className="card space-y-3">
+        <h2 className="font-bold">עמלת ניהול מדיה</h2>
+        <div className="grid gap-3 sm:grid-cols-3">
+          <div>
+            <label className="label">אחוז מסך המדיה (ברירת מחדל להצעה חדשה)</label>
+            {num(s.default_media_fee_percent, (v) => setS({ ...s, default_media_fee_percent: v }))}
+          </div>
+          <p className="text-sm text-muted sm:col-span-2 sm:mt-6">
+            עמלת הניהול בהצעה = הגבוה מבין סך דמי הניהול של שירותי ניהול המדיה, לבין האחוז הזה מסך תקציבי המדיה בכל הפלטפורמות.
+          </p>
         </div>
       </section>
 

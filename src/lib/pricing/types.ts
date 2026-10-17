@@ -72,12 +72,42 @@ export interface PricingItemInput {
   minCommitmentMonths?: number | null;
 }
 
+/** One platform's estimated monthly media budget (paid by the client directly to the platform). */
+export interface MediaBudgetLine {
+  id: string;
+  platform: string;
+  amount: number;
+}
+
 export interface PricingContext {
   vatRate: number; // e.g. 18
   rounding: number; // round line nets to this step (1 = whole shekels, 10 = tens)
-  mediaBudget: number | null; // proposal-level estimated monthly media budget
+  /** total estimated monthly media budget; ignored when mediaBudgets has rows */
+  mediaBudget: number | null;
+  /** per-platform media budgets; their sum is the total media budget */
+  mediaBudgets?: MediaBudgetLine[];
+  /** media management fee = MAX(sum of management base fees, this % × total media). Default 20. */
+  mediaFeePercent?: number;
   commitmentMonths: number; // for contract value
   globalDiscountPercent: number; // 0..100
+}
+
+/**
+ * Pooled media-management fee (all `hybrid_max` lines together):
+ * fee = MAX(sum of their base fees after line discounts, percent × total media budget).
+ */
+export interface MediaPool {
+  lineIds: string[];
+  fixedSum: number;
+  mediaTotal: number;
+  percent: number;
+  percentValue: number;
+  fee: number;
+  determinedBy: "fixed" | "percent";
+  /** extra amount added on top of the base fees when the percentage wins */
+  adjustment: number;
+  /** media total at which the percentage starts to exceed the base fees */
+  breakEvenMedia: number | null;
 }
 
 export type DeterminedBy = "fixed" | "percent" | "cap" | "tier" | null;
@@ -110,9 +140,15 @@ export interface Totals {
   oneTimeWithVat: number;
   contractValue: number; // oneTimeNet + monthlyNet × commitmentMonths (before VAT)
   effectiveDiscountPercent: number; // overall, for approvals
+  /** total estimated monthly media budget (informational – paid to the platforms, not included above) */
+  mediaTotal: number;
+  /** pooled media-management fee included in monthlyNet (0 when none) */
+  mediaFee: number;
 }
 
 export interface PricingResult {
   lines: PricedLine[];
   totals: Totals;
+  /** null when the proposal has no included media-management lines */
+  mediaPool: MediaPool | null;
 }

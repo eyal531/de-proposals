@@ -3,7 +3,7 @@ import { redirect } from "next/navigation";
 import { headers } from "next/headers";
 import { createClient } from "./supabase/server";
 import { DEFAULT_APPROVAL_RULES } from "./pricing/approvals";
-import type { Profile, Settings } from "./types";
+import { DEFAULT_BRAND, type Profile, type Settings } from "./types";
 
 export async function getSessionProfile() {
   const supabase = await createClient();
@@ -41,6 +41,8 @@ export function normalizeSettings(row: Record<string, unknown> | null): Settings
     free_email_domains: r.free_email_domains ?? [],
     approval_rules: { ...DEFAULT_APPROVAL_RULES, ...(r.approval_rules ?? {}) },
     default_terms: r.default_terms ?? "",
+    default_media_fee_percent: Number(r.default_media_fee_percent ?? 20),
+    brand: { ...DEFAULT_BRAND, ...(r.brand ?? {}) },
   };
 }
 

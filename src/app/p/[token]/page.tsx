@@ -45,7 +45,7 @@ export default async function ClientProposalPage({ params }: { params: Promise<{
       <ProposalDocument
         proposal={pub.proposal}
         items={pub.items}
-        companyName={settings.company_name}
+        brand={settings.brand}
         vatRate={settings.vat_rate}
         rounding={settings.rounding}
         mode="client"

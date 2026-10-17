@@ -1,6 +1,6 @@
 import type { ApprovalLevel, ApprovalReason, ApprovalRules } from "./pricing/approvals";
 import type { AddressForm, Recipient } from "./greeting";
-import type { Discount, ItemKind, PricingModel, PricingParams, Totals } from "./pricing/types";
+import type { Discount, ItemKind, MediaBudgetLine, PricingModel, PricingParams, Totals } from "./pricing/types";
 
 export type UserRole = "admin" | "approver" | "sales" | "viewer";
 
@@ -23,7 +23,36 @@ export interface Settings {
   free_email_domains: string[];
   approval_rules: ApprovalRules;
   default_terms: string;
+  default_media_fee_percent: number;
+  brand: Brand;
 }
+
+export type CoverStyle = "dark" | "accent" | "light";
+
+export interface Brand {
+  logo_url: string;
+  /** how to show the logo on a dark cover: invert a dark logo to white, or use a separate light logo */
+  logo_on_dark: "invert" | "as_is";
+  accent: string;
+  font: string;
+  cover: CoverStyle;
+  phone: string;
+  email: string;
+  website: string;
+}
+
+export const DEFAULT_BRAND: Brand = {
+  logo_url: "/brand/logo.png",
+  logo_on_dark: "invert",
+  accent: "#2340E8",
+  font: "IBM Plex Sans Hebrew",
+  cover: "dark",
+  phone: "072-392-3000",
+  email: "info@digitaleffective.com",
+  website: "digitaleffective.co.il",
+};
+
+export const BRAND_FONTS = ["IBM Plex Sans Hebrew", "Heebo", "Rubik", "Assistant", "Noto Sans Hebrew", "Frank Ruhl Libre"] as const;
 
 export interface Service {
   id: string;
@@ -94,6 +123,8 @@ export interface Proposal {
   sections: Section[];
   terms: string;
   media_budget: number | null;
+  media_budgets: MediaBudgetLine[];
+  media_fee_percent: number;
   commitment_months: number;
   global_discount_percent: number;
   show_list_prices: boolean;
